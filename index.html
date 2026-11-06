@@ -2098,7 +2098,8 @@ function migrate(s) {
   s.records = s.records.filter(function (r) { return r && r.sid; });
   Object.keys(s.attendance).forEach(function (k) { if (!s.attendance[k] || typeof s.attendance[k] !== 'object') s.attendance[k] = {}; });
   if (!Array.isArray(s.settings.subjects) || !s.settings.subjects.length) s.settings.subjects = subjectsPreset(s.settings.stage);
-  s.settings.subjects = s.settings.subjects.filter(function (x) { return x && x.name; }).map(function (x) { return { name: x.name, full: +x.full > 0 ? +x.full : 100, w: typeof x.w === 'number' && x.w >= 0 ? x.w : defaultWeight(x.name) }; });
+  s.settings.subjects = s.settings.subjects.filter(function (x) { return x && x.name; }).map(function (x) { return { name: x.name, full: +x.full > 0 ? +x.full : 100, w: typeof x.w === 'number' && x.w >= 0 ? x.w : defaultWeight(x.name) }; })
+    .filter(function (x) { return x.w > 0; });
   /* 一次性升级：语数英满分 120 → 150（含历史考试的科目满分） */
   if (+s.settings.wVer !== 2) {
     ['语文', '数学', '英语'].forEach(function (nm) {
@@ -2677,13 +2678,16 @@ var HR_TAGS = ['留守', '单亲', '近视', '过敏', '体育特长', '文艺�
 var ATT = { leave: { t: '请假', tone: 'amber' }, absent: { t: '缺勤', tone: 'red' }, late: { t: '迟到', tone: 'blue' } };
 /* 计入总分的折算系数：物理 ×0.9、化学 ×0.6；语数英 ×1；其余副科 ×0 表示只记录、不算进总分 */
 var SUBJECT_WEIGHTS = { '物理': 0.9, '化学': 0.6, '语文': 1, '数学': 1, '英语': 1 };
-function defaultWeight(name) { return Object.prototype.hasOwnProperty.call(SUBJECT_WEIGHTS, name) ? SUBJECT_WEIGHTS[name] : 0; }
+function defaultWeight(name) {
+  if (Object.prototype.hasOwnProperty.call(SUBJECT_WEIGHTS, name)) return SUBJECT_WEIGHTS[name];
+  return ['道法', '历史', '地理', '生物', '科学', '政治'].indexOf(name) >= 0 ? 0 : 1;
+}
 function subWeight(name) {
   var a = (S.settings && S.settings.subjects) || [];
   for (var i = 0; i < a.length; i++) if (a[i].name === name && typeof a[i].w === 'number') return a[i].w;
   return defaultWeight(name);
 }
-function subjectsPreset(stage) { return (SUBJECT_PRESETS[stage] || SUBJECT_PRESETS['初中']).map(function (x) { return { name: x[0], full: x[1], w: defaultWeight(x[0]) }; }); }
+function subjectsPreset(stage) { return (SUBJECT_PRESETS[stage] || SUBJECT_PRESETS['初中']).map(function (x) { return { name: x[0], full: x[1], w: defaultWeight(x[0]) }; }).filter(function (x) { return x.w > 0; }); }
 
 /* ---------- 我的班（本版修改：不再区分任课班 / 班主任班，所有班级都由我自己管理） ---------- */
 function hrCls() { return curCls(); }
@@ -2705,7 +2709,7 @@ function hrSubs(ex) {
   var out = [];
   var me = ownName();
   if (exOwn(ex)) out.push({ name: me, full: exFull(ex), own: true });
-  (ex.subs || []).forEach(function (s) { if (!exOwn(ex) || s.name !== me) out.push({ name: s.name, full: s.full }); });
+  (ex.subs || []).forEach(function (s) { if (subWeight(s.name) <= 0) return; if (!exOwn(ex) || s.name !== me) out.push({ name: s.name, full: s.full }); });
   return out;
 }
 function hrFull(ex) { return round1(sum(hrSubs(ex).filter(function (s) { return subWeight(s.name) > 0; }).map(function (s) { return s.full * subWeight(s.name); }))); }
@@ -7632,7 +7636,7 @@ function renderSetBody() {
             '<input value="' + (typeof x.w === 'number' ? x.w : 1) + '" data-inp="set-sub-w" data-i="' + i + '" aria-label="' + esc(x.name) + '折算系数" title="计入总分的系数：0.9 打九折，0 表示不计入总分" style="width:36px">' +
             '<button data-act="set-sub-del" data-i="' + i + '" aria-label="删除' + esc(x.name) + '">×</button></span>';
         }).join('') + '</div>' +
-        '<div class="muted" style="font-size:12px;margin-top:8px">第二个数字是折算系数：物理 0.9、化学 0.6，语数英填 1；副科填 0 就只记录成绩、不算进总分。总分满分按「满分 × 系数」相加。</div>' +
+        '<div class="muted" style="font-size:12px;margin-top:8px">第二个数字是折算系数：物理 0.9、化学 0.6，语数英填 1；填 0 的科目不会出现在成绩表里。总分满分按「满分 × 系数」相加。</div>' +
         '<div style="display:flex;gap:6px;margin-top:12px;flex-wrap:wrap"><input class="inp" id="newSub" placeholder="科目名" style="width:140px;height:32px" maxlength="8"><input class="inp num" id="newSubFull" value="100" style="width:72px;height:32px"><button class="btn btn-light btn-sm" data-act="set-sub-add">添加科目</button><button class="btn btn-ghost btn-sm" data-act="set-sub-preset">按' + esc(st.stage) + '重置</button></div></div>';
       h += '<div class="panel set-sec"><div class="panel-title">黑板 · 今日事项</div><div class="panel-sub">写在课堂黑板右侧，一行一条</div>' +
         '<textarea class="ta" style="max-width:520px;min-height:84px" data-inp="set" data-path="hrNote" placeholder="如：周五前交秋游安全回执">' + esc(st.hrNote || '') + '</textarea></div>';
@@ -7710,7 +7714,7 @@ UI.act['set-sub-del'] = function (el) { S.settings.subjects.splice(+el.getAttrib
 UI.act['set-sub-add'] = function () {
   var n = $('#newSub').value.trim(), f = parseFloat($('#newSubFull').value) || 100; if (!n) { $('#newSub').focus(); return; }
   if (n === ownName()) { UI.toast(n + ' 是你教的科目，会自动带上'); return; }
-  if (!S.settings.subjects.some(function (x) { return x.name === n; })) S.settings.subjects.push({ name: n, full: f, w: defaultWeight(n) });
+  if (!S.settings.subjects.some(function (x) { return x.name === n; })) S.settings.subjects.push({ name: n, full: f, w: 1 });
   save(); renderSetBody();
 };
 UI.act['set-sub-preset'] = function () { S.settings.subjects = subjectsPreset(S.settings.stage); save(); renderSetBody(); UI.toast('已按' + S.settings.stage + '重置科目'); };
