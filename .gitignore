@@ -1,0 +1,18 @@
+# OS junk
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# 编辑器
+.vscode/
+.idea/
+
+# 导出的备份文件（数据不进仓库）
+*.bak
+backup*.json
+工作台备份*.json
+
+# 临时文件
+~$*
+*.tmp
+*.log
