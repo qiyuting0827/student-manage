@@ -907,6 +907,25 @@ small.dupno { display: inline-block; margin-left: 4px; padding: 0 5px; height: 1
 .brand-name { white-space: nowrap; }
 @media (max-width: 1440px) { .brand { padding-left: 4px; padding-right: 0; gap: 8px; } .brand-name { font-size: 15px; letter-spacing: 0; } }
 
+/* ===== 本版修改（防丢数据加固）：顶部横幅 ===== */
+#guardBar { position: fixed; left: 0; right: 0; top: 0; z-index: 95; }
+.gb-item { display: flex; align-items: center; gap: 12px; padding: 9px 16px; font-size: 13px; line-height: 1.55; border-bottom: 1px solid rgba(0, 0, 0, .06); }
+.gb-item .gb-txt { flex: 1; min-width: 0; }
+.gb-item .gb-txt b { font-weight: 700; }
+.gb-btn { flex: none; border: 0; cursor: pointer; border-radius: 999px; padding: 5px 14px; font: 600 12.5px/1.4 var(--font); transition: background .15s; }
+.gb-btn.ghost { background: transparent; font-weight: 500; padding: 5px 6px; text-decoration: underline; text-underline-offset: 3px; }
+.gb-ro { background: #fdf3df; color: #7a4a00; box-shadow: 0 2px 10px rgba(0, 0, 0, .06); }
+.gb-ro .gb-btn { background: #171717; color: #fff; }
+.gb-ro .gb-btn:hover { background: #3a3a38; }
+.gb-ro .gb-btn.ghost { background: transparent; color: #7a4a00; }
+.gb-nag { background: #e8f1fe; color: #16406f; box-shadow: 0 2px 10px rgba(0, 0, 0, .06); }
+.gb-nag .gb-btn { background: #2f7ff0; color: #fff; }
+.gb-nag .gb-btn:hover { background: #1f6fe0; }
+.gb-nag .gb-btn.ghost { background: transparent; color: #16406f; }
+/* .app 与 .welcome 都是 position:fixed; inset:0，横幅出现时整体下移 */
+body.has-guard #app { top: var(--gb-h, 40px); }
+body.has-guard .welcome { top: var(--gb-h, 40px); }
+
 </style>
 </head>
 <body>
@@ -921,6 +940,7 @@ small.dupno { display: inline-block; margin-left: 4px; padding: 0 5px; height: 1
   Developed by @赛博老爸
   单文件、无依赖：双击即可在浏览器打开；数据保存在本机浏览器 localStorage。
   v2.0 把「任课教师工作台」的多班级、课表、教学进度、作业、单科成绩并了进来，班主任班另有全科成绩、档案、考勤、班级课表和值日表。
+  本版修改（防丢数据加固）见 MODIFICATIONS.md，搜索「本版修改」可定位全部改动。
 */
 /* =========================================================
    ART · 教室场景与角色（纯 SVG 字符串，无依赖）
@@ -1806,12 +1826,176 @@ var Store = (function () {
 })();
 
 
+/* =========================================================
+   本版修改 · 防丢数据加固
+   1) 多标签页租约锁：同一时间只允许一个标签页写入，其余只读并提示
+   2) 关闭 / 切走 / 页面隐藏时强制落盘，避免丢掉最后一步操作
+   3) 距上次导出备份满 7 天，启动时提醒（每天最多提醒一次）
+   ========================================================= */
+var GUARD = (function () {
+  var LOCK_KEY = STORE_KEY + '__lock';
+  var NAG_KEY = STORE_KEY + '__nag';
+  var TAB_ID = 't' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+  var LEASE = 6000;    // 租约 6 秒，心跳 2 秒：异常退出最多 6 秒后别人可接管
+  var BEAT = 2000;
+  var ro = false, started = false, beatTimer = null;
+
+  function readLock() {
+    try { var raw = Store.get(LOCK_KEY); return raw ? JSON.parse(raw) : null; } catch (e) { return null; }
+  }
+  function stamp(ts) {
+    try { Store.set(LOCK_KEY, JSON.stringify({ id: TAB_ID, ts: ts })); } catch (e) { }
+  }
+  function live(l) { return !!l && l.id !== TAB_ID && (Date.now() - (+l.ts || 0)) < LEASE; }
+
+  function host() {
+    var el = document.getElementById('guardBar');
+    if (!el) { el = document.createElement('div'); el.id = 'guardBar'; document.body.appendChild(el); }
+    return el;
+  }
+  function layout() {
+    var el = document.getElementById('guardBar');
+    if (!el || !el.children.length) {
+      if (el) el.remove();
+      document.body.classList.remove('has-guard');
+      document.body.style.removeProperty('--gb-h');
+      return;
+    }
+    document.body.classList.add('has-guard');
+    document.body.style.setProperty('--gb-h', el.offsetHeight + 'px');
+  }
+
+  function showRO() {
+    if (document.getElementById('gbRO')) return;
+    var el = document.createElement('div');
+    el.id = 'gbRO'; el.className = 'gb-item gb-ro';
+    el.innerHTML = '<span class="gb-txt"><b>本页为只读</b>：另一个标签页正在编辑这份数据，这里的改动不会保存。</span>' +
+      '<button class="gb-btn" data-gb="takeover">接管编辑</button>';
+    host().appendChild(el);
+    layout();
+  }
+  function hideRO() { var el = document.getElementById('gbRO'); if (el) { el.remove(); layout(); } }
+
+  function setRO(v) {
+    ro = !!v;
+    if (!started) return;
+    if (ro) showRO(); else hideRO();
+  }
+
+  /* 只读态下的兜底拦截：点按钮 / 改输入框都会提示，而不是默默改了不保存 */
+  function guardClick(e) {
+    if (!ro) return;
+    var t = e.target;
+    if (!t || !t.closest || t.closest('#guardBar')) return;
+    if (!t.closest('[data-act],button,a,input,select,textarea,[contenteditable="true"]')) return;
+    e.preventDefault(); e.stopPropagation();
+    if (window.UI && UI.toast) UI.toast('本页为只读：请到另一个标签页操作，或点上方「接管编辑」', 2600);
+  }
+  function guardKey(e) {
+    if (!ro) return;
+    var t = e.target;
+    if (!t || !t.closest || t.closest('#guardBar')) return;
+    if (!t.closest('input,textarea,[contenteditable="true"],button,a')) return;
+    e.preventDefault(); e.stopPropagation();
+  }
+
+  function takeOver(silent) {
+    stamp(Date.now());
+    setRO(false);
+    if (!silent && window.UI && UI.toast) UI.toast('已接管编辑，另一个标签页会变成只读', 2600);
+  }
+  function release() {
+    var l = readLock();
+    if (l && l.id === TAB_ID) stamp(0);
+  }
+
+  /* 每 2 秒对齐一次：对方还在就降级只读，对方走了就自动接手 */
+  function tick() {
+    var l = readLock();
+    if (ro) { if (!live(l)) takeOver(true); }
+    else if (live(l)) setRO(true);
+    else stamp(Date.now());
+  }
+
+  function hideNag() { var el = document.getElementById('gbNag'); if (el) { el.remove(); layout(); } }
+
+  function checkBackup() {
+    if (!S || !S.settings || !S.settings.onboarded || S.demo) return;
+    if (typeof allStudents === 'function' && !allStudents().length) return;   // 还没录数据就先不烦
+    var last = +S.settings.lastBackup || 0;
+    var days = last ? Math.floor((Date.now() - last) / 86400000) : -1;
+    if (last && days < 7) return;
+    var seen = 0;
+    try { seen = +Store.get(NAG_KEY) || 0; } catch (e) { }
+    if (Date.now() - seen < 86400000) return;      // 每天最多提醒一次
+    try { Store.set(NAG_KEY, String(Date.now())); } catch (e) { }
+    if (document.getElementById('gbNag')) return;
+    var el = document.createElement('div');
+    el.id = 'gbNag'; el.className = 'gb-item gb-nag';
+    el.innerHTML = '<span class="gb-txt">' +
+      (last ? '距上次导出备份已经 <b>' + days + ' 天</b>了。' : '还没有导出过备份。') +
+      '数据只保存在这台电脑的浏览器里，换电脑、清缓存都会丢，建议现在导出一份。</span>' +
+      '<button class="gb-btn" data-gb="backup">现在备份</button>' +
+      '<button class="gb-btn ghost" data-gb="nag-close">稍后</button>';
+    host().appendChild(el);
+    layout();
+  }
+
+  function onGbClick(e) {
+    var b = e.target.closest ? e.target.closest('[data-gb]') : null;
+    if (!b) return;
+    var k = b.getAttribute('data-gb');
+    if (k === 'takeover') { e.preventDefault(); takeOver(); }
+    else if (k === 'backup') { e.preventDefault(); if (window.UI && UI.act['backup']) UI.act['backup'](); hideNag(); }
+    else if (k === 'nag-close') { e.preventDefault(); hideNag(); }
+  }
+
+  function flush() { if (!ro) { try { save(true); } catch (e) { } } }
+
+  function start() {
+    if (started) return;
+    started = true;
+    var l = readLock();
+    if (live(l)) setRO(true);
+    else {
+      stamp(Date.now());
+      /* 两个标签页几乎同时打开时，读回确认谁持有锁 */
+      setTimeout(function () { var x = readLock(); if (x && x.id !== TAB_ID) setRO(true); }, 300);
+    }
+    beatTimer = setInterval(tick, BEAT);
+    window.addEventListener('storage', function (e) { if (!e.key || e.key === LOCK_KEY) tick(); });
+    document.addEventListener('click', guardClick, true);
+    document.addEventListener('keydown', guardKey, true);
+    document.addEventListener('click', onGbClick);
+    window.addEventListener('resize', function () { layout(); });
+
+    /* 本版修改：三处兜底落盘 */
+    window.addEventListener('beforeunload', function () { flush(); release(); });
+    window.addEventListener('pagehide', function () { flush(); release(); });
+    document.addEventListener('visibilitychange', function () { if (document.visibilityState === 'hidden') flush(); });
+    window.addEventListener('pageshow', function (e) { if (e.persisted) tick(); });
+  }
+
+  return {
+    start: start,
+    isRO: function () { return ro; },
+    checkBackup: checkBackup,
+    hideBackup: hideNag,
+    takeover: takeOver,
+    release: release,
+    tabId: TAB_ID
+  };
+})();
+
+
 var S = null; // 全局状态
 var saveTimer = null;
 var IDX = null, CACHE = {};
 function reindex() { IDX = null; CACHE = {}; }
 function save(now) {
   if (!S) return;
+  /* 本版修改：只读标签页不写入，避免覆盖正在编辑的那个标签页 */
+  if (GUARD && GUARD.isRO()) return;
   reindex();
   clearTimeout(saveTimer);
   var run = function () {
@@ -7923,11 +8107,15 @@ UI.act['w-go'] = function () {
 };
 
 function boot() {
+  /* 本版修改：先占锁再读数据，多开的标签页从一进来就是只读 */
+  GUARD.start();
   S = load();
   if (!S || !S.settings.onboarded) { S = defaultState(); showWelcome(); return; }
   UI.shell();
   var h = (location.hash || '').replace('#/', '');
   UI.go(UI.pages[h] ? h : 'class');
+  /* 本版修改：满 7 天没导出备份就在顶部提醒一次 */
+  GUARD.checkBackup();
   if (S.from) {   // 刚从旧版接过来的数据：提示一次，并存成新版
     var msg = { 'v1.1': '已把班主任工作台 v1.1 的数据升级到新版：原来的班设为班主任班，学生、座位、成绩、考勤都在', 'rk': '已接上任课教师工作台的数据。在班级栏点「班主任」，设置你当班主任的班', 'merge': '已把班主任工作台 v1.1 和任课教师工作台的数据合并到一起：' + (hrCls() ? hrCls().name : '') + ' 设为班主任班', 'demo': '已载入新版示例数据' }[S.from];
     delete S.from; save(true);
