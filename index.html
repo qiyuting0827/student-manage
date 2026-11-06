@@ -1786,7 +1786,7 @@ var ART = (function () {
 /* =========================================================
    CORE · 工具函数、存储、数据模型（多班级）、示例数据、查询与统计
    ========================================================= */
-var VERSION = '2.0.0';
+var VERSION = '2.1.0';
 var STORE_KEY = 'bzr-workbench-v2';
 /* 旧版本的数据：v1.1 班主任工作台（单个班）、任课教师工作台。第一次打开 v2.0 时自动接过来，旧数据原样保留 */
 var LEGACY_KEYS = ['bzr-workbench-v1', 'rk-workbench-v1'];
@@ -2081,6 +2081,15 @@ function migrate(s) {
   ['ai', 'teacher', 'countdown', 'thr'].forEach(function (k) { s.settings[k] = Object.assign({}, d.settings[k], s.settings[k] || {}); });
   if (!Array.isArray(s.settings.periods) || !s.settings.periods.length) s.settings.periods = periodsPreset(s.settings.stage);
   s.settings.periods = s.settings.periods.filter(function (p) { return p && p.id; });
+  /* 作息模板（本版新增）：旧数据只有一套作息，迁移成「平时作息」模板 */
+  if (!Array.isArray(s.settings.periodTpls) || !s.settings.periodTpls.length) s.settings.periodTpls = [{ id: 'tpl1', name: '平时作息', periods: s.settings.periods }];
+  s.settings.periodTpls = s.settings.periodTpls.filter(function (t) { return t && t.id && Array.isArray(t.periods); }).map(function (t) {
+    t.name = String(t.name || '作息模板');
+    t.periods = t.periods.filter(function (p) { return p && p.id; });
+    if (!t.periods.length) t.periods = periodsPreset(s.settings.stage);
+    return t;
+  });
+  if (!s.settings.periodTpls.length) s.settings.periodTpls = [{ id: 'tpl1', name: '平时作息', periods: s.settings.periods }];
   if (!Array.isArray(s.settings.reasons)) s.settings.reasons = deepClone(DEFAULT_REASONS);
   s.settings.days = clamp(+s.settings.days || 5, 5, 7);
   ['classes', 'changes', 'units', 'hw', 'exams', 'points', 'todos', 'chats'].forEach(function (k) { if (!Array.isArray(s[k])) s[k] = []; });
@@ -2096,6 +2105,7 @@ function migrate(s) {
     if (!Array.isArray(c.students)) c.students = [];
     if (c.color === undefined) c.color = i;
     c.layout = normLayout(c.layout);
+    if (!c.periodsId || !s.settings.periodTpls.some(function (t) { return t.id === c.periodsId; })) c.periodsId = s.settings.periodTpls[0].id;
     if (!c.seats || typeof c.seats !== 'object' || Array.isArray(c.seats)) c.seats = {};
     c.students = c.students.filter(function (st) { return st && st.id && st.name; });
     c.students.forEach(function (st) { if (!Array.isArray(st.tags)) st.tags = []; if (!Array.isArray(st.comments)) st.comments = []; if (st.note === undefined) st.note = ''; });
@@ -2128,6 +2138,11 @@ function migrate(s) {
       if (m.batch) m.batch.items.forEach(function (it) { if (it.st === 'run') it.st = 'wait'; });
     });
   });
+  /* 启动时按当前班绑定（或上次查看）的模板对齐 settings.periods */
+  var __c = s.classes.filter(function (c) { return c.id === s.settings.cur; })[0] || s.classes[0];
+  var __t = (__c && s.settings.periodTpls.filter(function (t) { return t.id === __c.periodsId; })[0]) || s.settings.periodTpls[0];
+  s.settings.tplId = __t.id;
+  s.settings.periods = __t.periods;
   return s;
 }
 
@@ -2416,6 +2431,15 @@ function dayLabel(ds) {
 function timeMin(t) { var p = String(t || '').split(':'); return (+p[0] || 0) * 60 + (+p[1] || 0); }
 function nowMin() { var d = new Date(); return d.getHours() * 60 + d.getMinutes() + d.getSeconds() / 60; }
 function periodById(pid) { var ps = S.settings.periods; for (var i = 0; i < ps.length; i++) if (ps[i].id === pid) return ps[i]; return null; }
+/* 作息模板：每套有自己的节次与时间，班级绑定其中一套 */
+function periodTpls() { return (S.settings && S.settings.periodTpls) || []; }
+function periodTplById(id) { var a = periodTpls(); for (var i = 0; i < a.length; i++) if (a[i].id === id) return a[i]; return null; }
+function periodTplOf(c) { return periodTplById(c && c.periodsId) || periodTpls()[0] || null; }
+function usePeriodTpl(id) {
+  var t = periodTplById(id) || periodTpls()[0]; if (!t) return null;
+  S.settings.tplId = t.id; S.settings.periods = t.periods; return t;
+}
+function syncPeriods() { var t = periodTplOf(curCls()); if (t) usePeriodTpl(t.id); }
 function slotTitle(sl) {
   if (!sl) return '';
   var c = sl.cid ? clsById(sl.cid) : null;
@@ -3152,6 +3176,7 @@ var UI = {
   },
 
   go: function (page, opts) {
+    if (page === 'class' && typeof syncPeriods === 'function') syncPeriods();
     var prev = UI.pages[UI.page];
     if (prev && prev.unmount) prev.unmount();
     UI.hideCard(); UI.closePop();
@@ -3865,7 +3890,7 @@ function fitClsBar() {
 }
 function switchCls(cid) {
   if (!clsById(cid)) return;
-  S.settings.cur = cid; save();
+  S.settings.cur = cid; syncPeriods(); save();
   Cls.view.fit = true; Cls.hw = null; Cls.exam = null; pbReset();
   if (Cls.mode === 'att' && !isHr(cid)) Cls.mode = 'daily';
   UI.act['pick-close'](); UI.hideCard(); UI.closePop();
@@ -4663,13 +4688,13 @@ function slotHTML(e, ds) {
 UI.register('timetable', {
   render: function (main) {
     if (TT.week === null) TT.week = isWeekend() ? 1 : 0;
-    if (TT.view === 'class' && hrCls()) { cttRender(main); return; }
+    if (TT.view === 'class' && hrCls()) { syncPeriods(); cttRender(main); return; }
     var st = S.settings, dates = weekDates(TT.week), t = todayStr();
     var showDays = st.days;
     for (var k = st.days; k < 7; k++) if (activeOn(dates[k]).length) showDays = k + 1;
     var h = '<div class="page scroll"><div class="page-head"><div><h1 class="page-title">课表</h1><div class="page-desc">' + weekTitle(TT.week) + '</div></div>' +
       '<div class="seg light" style="margin-left:6px"><button data-act="tt-week" data-d="-1" aria-label="上一周">' + ICON.back + '</button><button data-act="tt-week" data-d="0" class="' + (TT.week === (isWeekend() ? 1 : 0) ? 'on' : '') + '">' + (isWeekend() ? '下周' : '本周') + '</button><button data-act="tt-week" data-d="1" aria-label="下一周">' + ICON.fwd + '</button></div>' + ttViewSeg() +
-      '<div class="grow"></div><button class="btn btn-light" data-act="go" data-page="settings" data-sec="periods">' + ICON.timer + '作息时间</button>' +
+      '<div class="grow"></div><label class="muted" style="font-size:12.5px;margin-right:6px">作息</label><select class="sel" style="height:32px;width:auto;margin-right:8px" data-chg="tt-tpl" aria-label="选择作息模板">' + periodTpls().map(function (t) { return '<option value="' + t.id + '"' + (t.id === S.settings.tplId ? ' selected' : '') + '>' + esc(t.name) + '</option>'; }).join('') + '</select><button class="btn btn-light" data-act="go" data-page="settings" data-sec="periods">' + ICON.timer + '管理作息</button>' +
       '<button class="btn btn-light" data-act="tt-print">' + ICON.print + '打印课表</button><button class="btn btn-dark" data-act="tt-ics" title="导出 .ics 文件，导入手机或电脑日历，每节课前提醒">' + ICON.cal + '导出到日历</button></div>';
     if (!S.classes.length) h += '<div class="paste-hint">' + ICON.room + '<span>还没有添加任教班级。先到 <a href="#" data-act="go" data-page="settings" data-sec="classes">设置 → 我教的班级</a> 添加，再回来排课。</span></div>';
     else if (!Object.keys(S.tt).length) h += '<div class="paste-hint">' + ICON.cal + '<span>点任意格子排课：选班级、选「每周都这样」就是固定课表；以后临时调课，选「只改这一次」。</span></div>';
@@ -5843,7 +5868,7 @@ UI.act['cf-save'] = function () {
     var hrMsg = cfApplyHr(c);
     UI.toast(hrMsg || (reseat ? '已保存，其他同学已按学号重新入座' : '已保存'));
   } else {
-    c = { id: uid('c'), name: name, room: room, color: freeColor(), students: [], seats: {}, layout: normLayout(CF.lo) };
+    c = { id: uid('c'), name: name, room: room, color: freeColor(), students: [], seats: {}, layout: normLayout(CF.lo), periodsId: (periodTplOf(curCls()) || {}).id };
     var list = rosterParse(($('#cfRoster') || {}).value);
     list.forEach(function (p, i) { c.students.push({ id: uid('stu'), name: p.name.slice(0, 20), gender: p.gender, no: p.no || pad2(i + 1), tags: [], note: '', comments: [] }); });
     S.classes.push(c);
@@ -7549,6 +7574,7 @@ UI.inp['set'] = function (el) {
 };
 function renderSetBody() {
   var st = S.settings, h = '', el = $('#setBody'); if (!el) return;
+  if (SetP.sec === 'periods') usePeriodTpl(SetP.tplId || st.tplId || (curCls() && curCls().periodsId));
   if (SetP.sec === 'profile') {
     var t = st.teacher;
     h += '<div class="panel set-sec"><div class="panel-title" style="margin-bottom:14px">我的形象</div><div class="gender-pick">' +
@@ -7578,14 +7604,25 @@ function renderSetBody() {
         '<textarea class="ta" style="max-width:520px;min-height:84px" data-inp="set" data-path="hrNote" placeholder="如：周五前交秋游安全回执">' + esc(st.hrNote || '') + '</textarea></div>';
     }
   } else if (SetP.sec === 'periods') {
-    h += '<div class="panel set-sec"><div class="panel-title">作息时间</div><div class="panel-sub">课表里的每一行，以及「上课中 · 还剩几分钟」都按这里算</div>' +
+    var tpls = st.periodTpls, tcur = periodTplById(st.tplId) || tpls[0], tusers = S.classes.filter(function (c) { return c.periodsId === tcur.id; });
+    h += '<div class="panel set-sec"><div class="panel-title">作息模板</div><div class="panel-sub">平时、周末、寒暑假可以各建一套。每个班在下面选自己用哪一套，课表时间和「上课中 · 还剩几分钟」都按它算</div>' +
+      '<div class="chips">' + tpls.map(function (t) { return '<button class="' + (t.id === tcur.id ? 'on' : '') + '" data-act="tpl-sel" data-id="' + t.id + '">' + esc(t.name) + ' <span style="font-size:11px;opacity:.6">' + t.periods.length + ' 节</span></button>'; }).join('') + '</div>' +
+      '<div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap;align-items:center"><input class="inp" id="tplName" value="' + esc(tcur.name) + '" style="height:32px;width:190px" maxlength="12" data-inp="tpl-name" aria-label="模板名称" placeholder="模板名称">' +
+      '<button class="btn btn-light btn-sm" data-act="tpl-add">' + ICON.plus + '新建</button><button class="btn btn-light btn-sm" data-act="tpl-copy">复制这套</button>' +
+      (tpls.length > 1 ? '<button class="btn btn-xs btn-ghost" data-act="tpl-del" style="color:var(--red)">删除这套</button>' : '') + '</div>' +
+      '<div class="muted" style="font-size:12px;margin-top:10px">' + (tusers.length ? '正在用「' + esc(tcur.name) + '」：' + tusers.map(function (c) { return esc(c.name); }).join('、') : '还没有班级用这套作息') + '</div></div>' +
+      '<div class="panel set-sec"><div class="panel-title">「' + esc(tcur.name) + '」的节次与时间</div><div class="panel-sub">课表里的每一行，以及「上课中 · 还剩几分钟」都按这里算</div>' +
       '<div class="field"><label>每周上课</label><div class="chips">' + [[5, '周一至周五'], [6, '含周六'], [7, '含周日']].map(function (x) { return '<button class="' + (st.days === x[0] ? 'on' : '') + '" data-act="set-days" data-n="' + x[0] + '">' + x[1] + '</button>'; }).join('') + '</div></div>' +
       '<table class="tbl" style="max-width:560px"><thead><tr><th>名称</th><th>开始</th><th>结束</th><th></th></tr></thead><tbody>' + st.periods.map(function (p, i) {
         return '<tr><td><input class="inp" style="height:32px;width:130px" value="' + esc(p.name) + '" data-inp="per-field" data-i="' + i + '" data-k="name" maxlength="10"></td><td><input class="inp num" type="time" style="height:32px;width:120px" value="' + esc(p.start) + '" data-inp="per-field" data-i="' + i + '" data-k="start"></td><td><input class="inp num" type="time" style="height:32px;width:120px" value="' + esc(p.end) + '" data-inp="per-field" data-i="' + i + '" data-k="end"></td>' +
           '<td class="r"><button class="btn btn-xs btn-ghost" data-act="per-del" data-i="' + i + '" style="color:var(--red)">删除</button></td></tr>';
       }).join('') + '</tbody></table>' +
       '<div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap;align-items:center"><button class="btn btn-light btn-sm" data-act="per-add">' + ICON.plus + '加一节</button><span class="muted" style="font-size:12px;margin-left:8px">按学段套用常见作息：</span>' + ['小学', '初中', '高中'].map(function (x) { return '<button class="btn btn-xs btn-ghost" data-act="per-preset" data-s="' + x + '">' + x + '</button>'; }).join('') + '</div>' +
-      '<div class="muted" style="margin-top:10px;font-size:12px">删除一节后，课表里这一节的安排也会去掉。早读、课后服务、晚自习也可以作为一节加进来。</div></div>';
+      '<div class="muted" style="margin-top:10px;font-size:12px">删除一节后，课表里这一节的安排也会去掉。早读、课后服务、晚自习也可以作为一节加进来。</div></div>' +
+      '<div class="panel set-sec"><div class="panel-title">每个班用哪套作息</div><div class="panel-sub">换模板后，这个班的课表按新模板的节次与时间显示，已有的安排按节次保留</div>' +
+      (S.classes.length ? '<table class="tbl" style="max-width:560px"><thead><tr><th>班级</th><th>作息模板</th></tr></thead><tbody>' + S.classes.map(function (c) {
+        return '<tr><td>' + esc(c.name) + '</td><td><select class="sel" data-chg="cls-tpl" data-id="' + c.id + '">' + tpls.map(function (t) { return '<option value="' + t.id + '"' + (c.periodsId === t.id ? ' selected' : '') + '>' + esc(t.name) + '</option>'; }).join('') + '</select></td></tr>';
+      }).join('') + '</tbody></table>' : '<div class="muted" style="font-size:12.5px">还没有班级</div>') + '</div>';
   } else if (SetP.sec === 'teach') {
     var thr = st.thr;
     h += '<div class="panel set-sec"><div class="panel-title">成绩线</div><div class="panel-sub">按满分的百分比计算，各学科、各年级按学校要求调整</div><div class="row3" style="max-width:520px">' +
@@ -7656,6 +7693,38 @@ function layoutText(c) {
   return DESK_PER.filter(function (d) { return d[0] === lo.per; })[0][1] + ' · ' + lay.rows + ' 排 × ' + lay.cols + ' 座' + (lo.auto ? '<span class="muted">（自动）</span>' : '');
 }
 /* 作息 */
+UI.inp['tpl-name'] = function (el) { var t = periodTplById(S.settings.tplId), v = el.value.trim(); if (!t || !v) return; t.name = v; save(); };
+UI.act['tpl-sel'] = function (el) { SetP.tplId = el.getAttribute('data-id'); usePeriodTpl(SetP.tplId); save(); renderSetBody(); };
+UI.act['tpl-add'] = function () {
+  var id = uid('tpl');
+  S.settings.periodTpls.push({ id: id, name: '新作息 ' + (S.settings.periodTpls.length + 1), periods: periodsPreset(S.settings.stage) });
+  SetP.tplId = id; usePeriodTpl(id); save(); renderSetBody(); UI.toast('已新建作息模板，可以改名字和时间');
+};
+UI.act['tpl-copy'] = function () {
+  var src = periodTplById(S.settings.tplId); if (!src) return;
+  var id = uid('tpl');
+  S.settings.periodTpls.push({ id: id, name: src.name + ' 副本', periods: deepClone(src.periods) });
+  SetP.tplId = id; usePeriodTpl(id); save(); renderSetBody(); UI.toast('已复制');
+};
+UI.act['tpl-del'] = function () {
+  var t = periodTplById(S.settings.tplId); if (!t) return;
+  var all = S.settings.periodTpls; if (all.length <= 1) return;
+  var users = S.classes.filter(function (c) { return c.periodsId === t.id; });
+  var fb = all.filter(function (x) { return x.id !== t.id; })[0];
+  var go = function () {
+    S.settings.periodTpls = all.filter(function (x) { return x.id !== t.id; });
+    S.classes.forEach(function (c) { if (c.periodsId === t.id) c.periodsId = fb.id; });
+    SetP.tplId = fb.id; usePeriodTpl(fb.id); save(); renderSetBody(); UI.toast('已删除，相关班级改用「' + fb.name + '」');
+  };
+  if (users.length) UI.confirm('删除「' + esc(t.name) + '」', users.length + ' 个班正在用这套作息，删除后会改用「' + esc(fb.name) + '」。', '删除', go, true); else go();
+};
+UI.chg['cls-tpl'] = function (el) {
+  var c = clsById(el.getAttribute('data-id')); if (!c) return;
+  c.periodsId = el.value; save();
+  if ((curCls() || {}).id === c.id) { syncPeriods(); UI.toast('已换成「' + (periodTplById(el.value) || {}).name + '」'); }
+  renderSetBody();
+};
+UI.chg['tt-tpl'] = function (el) { usePeriodTpl(el.value); save(); UI.rerender(); };
 UI.act['set-days'] = function (el) { S.settings.days = +el.getAttribute('data-n'); save(); renderSetBody(); };
 UI.inp['per-field'] = function (el) {
   var p = S.settings.periods[+el.getAttribute('data-i')], k = el.getAttribute('data-k'), v = el.value.trim();
@@ -7664,10 +7733,13 @@ UI.inp['per-field'] = function (el) {
 UI.act['per-del'] = function (el) {
   var i = +el.getAttribute('data-i'), p = S.settings.periods[i];
   var used = Object.keys(S.tt).filter(function (k) { return k.split('|')[1] === p.id; }).length;
+  var shared = S.settings.periodTpls.some(function (t) { return t.id !== S.settings.tplId && t.periods.some(function (x) { return x.id === p.id; }); });
   var go = function () {
     S.settings.periods.splice(i, 1);
-    Object.keys(S.tt).forEach(function (k) { if (k.split('|')[1] === p.id) delete S.tt[k]; });
-    S.changes = S.changes.filter(function (c) { return c.pid !== p.id; });
+    if (!shared) {
+      Object.keys(S.tt).forEach(function (k) { if (k.split('|')[1] === p.id) delete S.tt[k]; });
+      S.changes = S.changes.filter(function (c) { return c.pid !== p.id; });
+    }
     save(); renderSetBody();
   };
   if (used) UI.confirm('删除「' + esc(p.name) + '」', '课表里有 ' + used + ' 处排在这一节，会一起删除。', '删除', go, true); else go();
@@ -7681,7 +7753,9 @@ UI.act['per-add'] = function () {
 UI.act['per-preset'] = function (el) {
   var stg = el.getAttribute('data-s');
   UI.confirm('套用' + stg + '作息', '会把节次和时间换成' + stg + '常见作息。课表里和新节次对不上的安排会被去掉。', '套用', function () {
+    var __t = periodTplById(S.settings.tplId);
     S.settings.periods = periodsPreset(stg);
+    if (__t) __t.periods = S.settings.periods;
     var ok = {}; S.settings.periods.forEach(function (p) { ok[p.id] = 1; });
     Object.keys(S.tt).forEach(function (k) { if (!ok[k.split('|')[1]]) delete S.tt[k]; });
     save(); renderSetBody(); UI.toast('已套用' + stg + '作息');
