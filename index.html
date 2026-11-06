@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>教师班主任工作台</title>
+<title>教师工作台</title>
 <meta name="description" content="教师班主任工作台 v2.0 · 个人工作台系列第 1 期：班主任班的学生档案、考勤、全科成绩、班级课表与值日表，加上任教各班的课表、教学进度、作业和单科成绩分析，以及 AI 助手。单文件，数据只存在本机。">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='-24 -24 48 48'%3E%3Crect x='-24' y='-24' width='48' height='48' rx='13' fill='%23171717'/%3E%3Ccircle cx='0' cy='-2' r='11' fill='%23fff'/%3E%3Cellipse cx='-4' cy='-2' rx='2.6' ry='3.1' fill='%23171717'/%3E%3Cellipse cx='4' cy='-2' rx='2.6' ry='3.1' fill='%23171717'/%3E%3Cpath d='M-10 9 Q0 14 10 9 L11 14 Q0 19 -11 14 Z' fill='%23e5483b'/%3E%3C/svg%3E">
 <style>
@@ -2645,20 +2645,21 @@ var HR_TAGS = ['留守', '单亲', '近视', '过敏', '体育特长', '文艺�
 var ATT = { leave: { t: '请假', tone: 'amber' }, absent: { t: '缺勤', tone: 'red' }, late: { t: '迟到', tone: 'blue' } };
 function subjectsPreset(stage) { return (SUBJECT_PRESETS[stage] || SUBJECT_PRESETS['初中']).map(function (x) { return { name: x[0], full: x[1] }; }); }
 
-/* ---------- 班主任班 ---------- */
-function hrCls() { return S.settings.hr ? clsById(S.settings.hr) : null; }
-function isHr(cid) { return !!cid && cid === S.settings.hr && !!clsById(cid); }
-function isHrStu(sid) { var c = clsOfStu(sid); return !!c && isHr(c.id); }
+/* ---------- 我的班（本版修改：不再区分任课班 / 班主任班，所有班级都由我自己管理） ---------- */
+function hrCls() { return curCls(); }
+function isHr(cid) { return !!cid && !!clsById(cid); }
+function isHrStu(sid) { return !!clsOfStu(sid); }
 function ownName() { return S.settings.teacher.subject || '本学科'; }
 function setHr(cid) {
-  S.settings.hr = cid || '';
+  if (cid && clsById(cid)) S.settings.cur = cid;
+  S.settings.hr = '';
   save(); reindex();
 }
 
-/* ---------- 全科成绩（只算班主任班） ---------- */
+/* ---------- 全科成绩（每个班都按全科管理） ---------- */
 function exOwn(ex) { return ex.own !== false; }
-function exHasHr(ex) { var h = S.settings.hr; return !!h && ex.cids.indexOf(h) >= 0; }
-function isHrFull(ex) { return exHasHr(ex) && (ex.subs || []).length > 0; }
+function exHasHr(ex) { var c = curCls(); return !!c && ex.cids.indexOf(c.id) >= 0; }
+function isHrFull(ex) { return (ex.subs || []).length > 0; }
 /* 全科科目：我教的科目（分项合计成一科）在前，其他科目在后 */
 function hrSubs(ex) {
   var out = [];
@@ -2682,7 +2683,7 @@ function setSub(ex, sid, name, v) {
 }
 function byDate(a, b) { return a.date < b.date ? -1 : a.date > b.date ? 1 : 0; }
 /* 班主任班参加的全部考试（含只录其他科目的） */
-function hrExams() { var h = S.settings.hr; if (!h) return []; return S.exams.filter(function (e) { return e.cids.indexOf(h) >= 0; }).sort(byDate); }
+function hrExams() { var c = curCls(); if (!c) return []; return S.exams.filter(function (e) { return e.cids.indexOf(c.id) >= 0; }).sort(byDate); }
 /* 有多个科目的考试（期中、期末、月考），全科趋势和档案用这些 */
 function hrFullExams() { return hrExams().filter(isHrFull); }
 /* 两科及以上才算「全科」考试：总分、班级名次、全科趋势只用这些；只考一科的（比如历史单元测）只按这一科看 */
@@ -2692,7 +2693,7 @@ function hrPrev(ex) { var e = hrFullExams().filter(hrMulti); for (var i = e.inde
 /* 班主任班全科名次 */
 function hrRank(ex) {
   if (!ex) return { rows: [], m: {}, n: 0 };
-  var key = 'hr' + ex.id; if (CACHE[key]) return CACHE[key];
+  var key = 'hr' + (curCls() || {}).id + ex.id; if (CACHE[key]) return CACHE[key];
   var c = hrCls(), rows = [];
   if (c) studentsOf(c.id).forEach(function (s) { var t = hrTotalOf(ex, s.id); if (t !== null) rows.push({ sid: s.id, total: t, subs: hrRow(ex, s.id) }); });
   rows.sort(function (a, b) { return b.total - a.total; });
@@ -2718,7 +2719,7 @@ function hrSubStats(ex, sub) {
 }
 function hrStats(ex) {
   if (!ex) return { n: 0, subs: [] };
-  var key = 'hrs' + ex.id; if (CACHE[key]) return CACHE[key];
+  var key = 'hrs' + (curCls() || {}).id + ex.id; if (CACHE[key]) return CACHE[key];
   var ri = hrRank(ex), full = hrFull(ex), tot = ri.rows.map(function (r) { return r.total; }), thr = S.settings.thr;
   var res = { ex: ex, full: full, n: ri.n, table: ri.rows, subs: hrSubs(ex).map(function (s) { return hrSubStats(ex, s); }) };
   if (tot.length) {
@@ -3112,7 +3113,7 @@ var UI = {
   shell: function () {
     var t = S.settings.teacher;
     var h = '<aside class="side">' +
-      '<div class="brand">' + brandMark() + '<div><div class="brand-name">教师班主任工作台</div><div class="brand-sub">' + esc(brandSub()) + '</div></div></div>' +
+      '<div class="brand">' + brandMark() + '<div><div class="brand-name">教师工作台</div><div class="brand-sub">' + esc(brandSub()) + '</div></div></div>' +
       '<div class="search">' + ICON.search + '<input id="gsearch" placeholder="搜索学生姓名 / 学号" autocomplete="off" data-inp="gsearch" data-key="gsearch"><div id="gsearchPop"></div></div>' +
       '<nav class="nav">' +
       navItem('class', ICON.room, '课堂') +
@@ -3125,7 +3126,7 @@ var UI = {
       navItem('ai', ICON.spark, 'AI 助手') +
       '</nav>' +
       '<div class="nav-label">最近对话</div><div class="recent" id="recentChats"></div>' +
-      '<div class="side-foot">' + (S.demo ? '<div class="side-demo"><b>正在查看示例数据</b>3 个班都是虚拟的，其中 3 班是班主任班。看明白了就换成自己的班<button class="btn btn-xs btn-dark" data-act="demo-clear">开始录入我的班级</button></div>' : '') + '<nav class="nav">' + navItem('settings', ICON.gear, '设置') + '</nav>' +
+      '<div class="side-foot">' + (S.demo ? '<div class="side-demo"><b>正在查看示例数据</b>3 个班都是虚拟的。看明白了就换成自己的班<button class="btn btn-xs btn-dark" data-act="demo-clear">开始录入我的班级</button></div>' : '') + '<nav class="nav">' + navItem('settings', ICON.gear, '设置') + '</nav>' +
       '<button class="me" data-act="go" data-page="settings" data-sec="profile">' + ART.teacherAvatar(t, 32) +
       '<div><div class="me-name">' + esc(t.name) + '</div><div class="me-sub">' + esc(meSub()) + '</div></div></button>' +
       '<div class="sign">Developed by @赛博老爸</div></div>' +
@@ -3258,8 +3259,8 @@ function aiAvatar(size) {
     '<path d="M-10 10 Q0 15 10 10 L11 15 Q0 20 -11 15 Z" fill="#2f7ff0"/></svg>';
 }
 function stuAva(st, size) { return ART.avatar(st, size, { color: stuColor(st) }); }
-function brandSub() { var h = hrCls(); return h ? h.name + ' · 班主任' : (S.settings.teacher.subject || '任课') + ' · ' + S.classes.length + ' 个班'; }
-function meSub() { var t = S.settings.teacher, h = hrCls(); return (h ? '班主任 · ' : '') + (t.subject || '') + '老师 · ' + S.classes.length + ' 个班'; }
+function brandSub() { var c = curCls(); return c ? c.name : (S.settings.teacher.subject || '任课') + ' · ' + S.classes.length + ' 个班'; }
+function meSub() { var t = S.settings.teacher; return (t.subject || '') + '老师 · ' + S.classes.length + ' 个班'; }
 
 /* ---------- 事件委托 ---------- */
 document.addEventListener('click', function (e) {
@@ -3746,7 +3747,7 @@ function drawScene() {
   var bd = boardData(c); Cls.scrKind = bd.kind;
   var res = ART.scene({
     rows: Cls.lay.rows, pairs: Cls.lay.groups, per: Cls.lay.per, side: Cls.lay.side, extra: Cls.extra, subjects: HW_SHELF, seats: sm.m, views: buildViews(c),
-    teacher: { gender: t.gender, label: t.name + ' · ' + (c && isHr(c.id) ? '班主任' : (t.subject || '任课老师')) }, board: bd, seatNos: Cls.mode === 'seat', emptyCls: Cls.mode === 'seat' ? 'show-add' : '',
+    teacher: { gender: t.gender, label: t.name + ' · ' + (t.subject || '任课老师') }, board: bd, seatNos: Cls.mode === 'seat', emptyCls: Cls.mode === 'seat' ? 'show-add' : '',
     duty: c && isHr(c.id) ? { names: dutyOn(c.id, todayStr()).map(function (s) { return s.name; }), set: dutyHas(c.id), day: '周' + WEEK[new Date().getDay()] } : null
   });
   Cls.L = res.L;
@@ -3860,7 +3861,7 @@ function renderClsBar() {
   var c = curCls();
   el.innerHTML = (S.classes.length ? '<div class="seg cls-seg">' + S.classes.map(function (k) {
     var live = currentLesson(k.id);
-    return '<button class="' + (c && k.id === c.id ? 'on' : '') + '" data-act="cls-switch" data-cid="' + k.id + '" title="' + esc(k.name) + ' · ' + k.students.length + ' 人' + (isHr(k.id) ? ' · 班主任班' : '') + '"><i class="cdot" style="background:' + clsColor(k) + '"></i>' + esc(k.name) + (isHr(k.id) ? '<i class="hr-flag">班</i>' : '') + (live ? '<i class="live" style="margin-left:2px"></i>' : '') + '</button>';
+    return '<button class="' + (c && k.id === c.id ? 'on' : '') + '" data-act="cls-switch" data-cid="' + k.id + '" title="' + esc(k.name) + ' · ' + k.students.length + ' 人"><i class="cdot" style="background:' + clsColor(k) + '"></i>' + esc(k.name) + (live ? '<i class="live" style="margin-left:2px"></i>' : '') + '</button>';
   }).join('') + '<button class="seg-add" data-act="cls-new" title="新建班级" aria-label="新建班级">' + ICON.plus + (S.classes.length ? '' : '新建班级') + '</button></div>' : '<button class="btn btn-dark btn-sm" data-act="cls-new">' + ICON.plus + '新建班级</button>') +
     (c ? hrBtnHTML(c) + '<button class="cls-gear" data-act="cls-edit" data-cid="' + c.id + '" title="改名、桌椅排列（单人 / 双人）、学生人数、删除班级">' + ICON.gear + '班级与桌椅</button>' : '') +
     (c ? '<div class="cls-status">' + clsStatusText(c) + '</div>' : '');
@@ -3912,7 +3913,7 @@ function teacherCardHTML() {
   var left = today.filter(function (e) { return lessonState(e) !== 'past'; }).length;
   var week = 0; S.classes.forEach(function (c) { week += weeklyCount(c.id, '正课'); });
   var hc = hrCls();
-  return '<div class="hc-head">' + ART.teacherAvatar(t, 56) + '<div><div class="hc-name">' + esc(t.name) + '</div><div class="hc-role">' + (hc ? esc(hc.name) + ' 班主任 · ' : '') + esc(t.subject || '任课') + '老师 · 任教 ' + S.classes.length + ' 个班</div>' +
+  return '<div class="hc-head">' + ART.teacherAvatar(t, 56) + '<div><div class="hc-name">' + esc(t.name) + '</div><div class="hc-role">' + esc(t.subject || '任课') + '老师 · 任教 ' + S.classes.length + ' 个班</div>' +
     '<div class="hc-status"><i></i>今天 ' + today.length + ' 节课' + (today.length ? '，还剩 ' + left + ' 节' : '') + '</div></div></div>' +
     '<div class="hc-sec"><div class="hc-k">每周：</div><div class="hc-v">' + week + ' 节正课 · ' + S.classes.map(function (c) { return esc(c.name) + ' ' + weeklyCount(c.id, '正课') + ' 节'; }).join('，') + '</div></div>' +
     '<div class="hc-sec"><div class="hc-k">AI 能帮你：</div><div class="tags"><span class="tag">写教案</span><span class="tag">分层作业</span><span class="tag">试卷分析</span><span class="tag">学科评语</span><span class="tag">教学反思</span></div></div>' +
@@ -4236,7 +4237,7 @@ UI.act['demo-clear'] = function () {
       '<div class="field"><label>我教的班级<span class="req">*</span></label><input class="inp" id="dcNames" placeholder="多个班用顿号或逗号隔开，如：初二（3）班、初二（5）班"></div>' +
       '<div class="row2"><div class="field"><label>任教学科</label><input class="inp" id="dcSub" value="' + esc(S.settings.teacher.subject || '') + '"></div>' +
       '<div class="field"><label>学段</label><select class="sel" id="dcStage"><option>小学</option><option selected>初中</option><option>高中</option></select></div></div>' +
-      '<label class="chk" style="margin:-4px 0 14px"><input type="checkbox" id="dcHr" checked> 我是第一个班的班主任（以后可以在课堂页点「班主任」改）</label>' +
+      '' +
       '<div class="row2"><div class="field"><label>学校</label><input class="inp" id="dcSchool" placeholder="选填"></div><div class="field"><label>课桌</label><div class="seg light" id="dcPer">' + DESK_PER.slice(0, 2).map(function (d, i) { return '<button type="button" class="' + (i === 1 ? 'on' : '') + '" data-act="dc-per" data-v="' + d[0] + '">' + d[1] + '</button>'; }).join('') + '</div><div class="hint">以后每个班还可以单独改</div></div></div>',
     foot: '<button class="btn btn-light" data-act="modal-close">取消</button><button class="btn btn-dark" data-act="demo-clear-ok">清空并开始</button>'
   });
@@ -4531,7 +4532,7 @@ UI.act['pb-undo'] = function () {
    ========================================================= */
 
 /* ---------- 设为 / 取消班主任班 ---------- */
-UI.act['hr-toggle'] = function (el) {
+UI.act['hr-toggle'] = function (el) { return;
   var c = clsById(el.getAttribute('data-cid')); if (!c) return;
   UI.hideCard(); UI.closePop();
   var cur = hrCls();
@@ -4552,8 +4553,7 @@ UI.act['hr-toggle'] = function (el) {
   done(c.name + ' 已设为班主任班：可以录各科成绩、管考勤、排值日了');
 };
 function hrBtnHTML(c) {
-  var on = isHr(c.id);
-  return '<button class="hr-btn' + (on ? ' on' : '') + '" data-act="hr-toggle" data-cid="' + c.id + '" title="' + (on ? '这是你当班主任的班：所有科目的成绩、学生档案、考勤、值日都在这里管。点一下可以取消' : '设为你当班主任的班：可以管这个班所有科目的成绩、学生档案、考勤和值日') + '">' + ICON.flag + '<span>' + (on ? '班主任班' : '班主任') + '</span></button>';
+  return '';
 }
 
 /* ---------- 黑板：今日课程（按星期自动换，显示进度）+ 今日事项 ---------- */
@@ -5025,12 +5025,12 @@ function cttChoices() {
   var out = [ownName()];
   (S.settings.subjects || []).forEach(function (s) { if (out.indexOf(s.name) < 0) out.push(s.name); });
   CTT_EXTRA.forEach(function (x) { if (out.indexOf(x) < 0) out.push(x); });
-  Object.keys(S.ctt[S.settings.hr] || {}).forEach(function (k) { var v = S.ctt[S.settings.hr][k]; if (v && out.indexOf(v) < 0) out.push(v); });
+  Object.keys(S.ctt[(curCls() || {}).id] || {}).forEach(function (k) { var v = S.ctt[(curCls() || {}).id][k]; if (v && out.indexOf(v) < 0) out.push(v); });
   return out;
 }
 function ttViewSeg() {
   var c = hrCls(); if (!c) return '';
-  return '<div class="seg light tt-view"><button data-act="tt-view" data-v="mine" class="' + (TT.view !== 'class' ? 'on' : '') + '">我的课表</button><button data-act="tt-view" data-v="class" class="' + (TT.view === 'class' ? 'on' : '') + '"><i class="hr-flag">班</i>' + esc(c.name) + '</button></div>';
+  return '<div class="seg light tt-view"><button data-act="tt-view" data-v="mine" class="' + (TT.view !== 'class' ? 'on' : '') + '">我的课表</button><button data-act="tt-view" data-v="class" class="' + (TT.view === 'class' ? 'on' : '') + '">' + esc(c.name) + '</button></div>';
 }
 UI.act['tt-view'] = function (el) { TT.view = el.getAttribute('data-v'); UI.rerender(); };
 function dayOff(ds) { return S.changes.filter(function (c) { return c.date === ds && c.pid === '*'; })[0] || null; }
@@ -5208,7 +5208,7 @@ UI.act['ctt-paste-ok'] = function () {
 UI.act['ctt-print'] = function () {
   var st = S.settings, c = hrCls(), h = '';
   h += '<!doctype html><html><head><meta charset="utf-8"><title>' + esc(c.name) + ' 课表</title><style>body{font-family:"PingFang SC","Microsoft YaHei",sans-serif;padding:24px;color:#171717}h1{font-size:22px;text-align:center;margin:0 0 4px}p{text-align:center;color:#777;margin:0 0 16px;font-size:12px}table{border-collapse:collapse;width:100%}th,td{border:1px solid #cfcfcc;padding:8px 6px;text-align:center;font-size:15px;height:46px}th{background:#f5f5f4;font-size:13px}th small{display:block;color:#888;font-size:11px;font-weight:400}@media print{body{padding:0}}</style></head><body>';
-  h += '<h1>' + esc(c.name) + ' 课程表</h1><p>' + esc(st.school || '') + ' ' + esc(st.term || '') + ' · 班主任 ' + esc(st.teacher.name) + '</p><table><tr><th>节次</th>';
+  h += '<h1>' + esc(c.name) + ' 课程表</h1><p>' + esc(st.school || '') + ' ' + esc(st.term || '') + ' · ' + esc(st.teacher.name) + ' 老师</p><table><tr><th>节次</th>';
   for (var i = 1; i <= st.days; i++) h += '<th>周' + WEEK[i % 7] + '</th>';
   h += '</tr>';
   st.periods.forEach(function (p) {
@@ -5467,7 +5467,7 @@ UI.register('students', {
     if (opts && opts.sec && clsById(opts.sec)) Stu.cid = opts.sec;
     if (!clsById(Stu.cid)) Stu.cid = (curCls() || {}).id || '';
     var n = allStudents().length;
-    main.innerHTML = '<div class="page scroll"><div class="page-head"><div><h1 class="page-title">学生名单</h1><div class="page-desc">' + S.classes.length + ' 个班 · 共 ' + n + ' 人' + (S.settings.hr ? ' · 班主任班有完整档案（家庭、联系人、生日等），其他班只记上课需要的信息' : ' · 只记上课需要的信息') + '</div></div><div class="grow"></div>' +
+    main.innerHTML = '<div class="page scroll"><div class="page-head"><div><h1 class="page-title">学生名单</h1><div class="page-desc">' + S.classes.length + ' 个班 · 共 ' + n + ' 人 · 每个班都有完整档案（家庭、联系人、生日等）</div></div><div class="grow"></div>' +
       '<button class="btn btn-ghost" data-act="stu-cls-edit">' + ICON.gear + '班级设置</button><button class="btn btn-light" data-act="stu-import">' + ICON.up + '批量导入</button><button class="btn btn-light" data-act="stu-export">' + ICON.down + '导出名单</button><button class="btn btn-dark" data-act="stu-add">' + ICON.userplus + '添加学生</button></div>' +
       '<div class="filterbar"><div class="chips" id="stuChips"></div><input class="inp" placeholder="在全部班级里搜姓名、学号、标签" value="' + esc(Stu.q) + '" data-inp="stu-q" id="stuQ" style="margin-left:auto"></div>' +
       '<div class="tbl-wrap" id="stuTbl"></div></div>';
@@ -5517,16 +5517,16 @@ function openStudentForm(st, opts) {
   if (!S.classes.length) { UI.toast('先新建一个班级'); openClassForm(null); return; }
   var isNew = !st, c0 = st ? clsOfStu(st.id) : (clsById(opts.cid) || curCls());
   var d = st ? deepClone(st) : { id: uid('stu'), name: '', gender: 'M', no: nextNoIn(c0), tags: [], note: '', comments: [] };
-  var hrOn = isHr(c0.id), tagPool = STU_TAGS.concat(S.settings.hr ? HR_TAGS : []);
+  var hrOn = isHr(c0.id), tagPool = STU_TAGS.concat(HR_TAGS);
   Stu.form = d; Stu.formSeat = isNew && opts.seat ? { cid: c0.id, key: opts.seat } : null;
   var body = '<div class="row3"><div class="field"><label>姓名<span class="req">*</span></label><input class="inp" id="fName" value="' + esc(d.name) + '" autofocus maxlength="20" data-inp="f-name"></div>' +
     '<div class="field"><label>性别</label><div class="seg light" id="fGender"><button type="button" class="' + (d.gender !== 'F' ? 'on' : '') + '" data-act="f-gender" data-g="M">男生</button><button type="button" class="' + (d.gender === 'F' ? 'on' : '') + '" data-act="f-gender" data-g="F">女生</button></div></div>' +
     '<div class="field"><label>学号</label><input class="inp num" id="fNo" value="' + esc(d.no) + '" data-inp="f-name"></div></div><div class="dup-hint hide" id="fDupHint"></div>' +
-    '<div class="field"><label>班级</label><select class="sel" id="fCls" data-chg="f-cls">' + S.classes.map(function (c) { return '<option value="' + c.id + '"' + (c === c0 ? ' selected' : '') + '>' + esc(c.name) + (isHr(c.id) ? '（班主任班）' : '') + '</option>'; }).join('') + '</select>' + (isNew ? '' : '<div class="hint">换班后，这位同学在原班的作业登记不会带过去</div>') + '</div>' +
+    '<div class="field"><label>班级</label><select class="sel" id="fCls" data-chg="f-cls">' + S.classes.map(function (c) { return '<option value="' + c.id + '"' + (c === c0 ? ' selected' : '') + '>' + esc(c.name) + '</option>'; }).join('') + '</select>' + (isNew ? '' : '<div class="hint">换班后，这位同学在原班的作业登记不会带过去</div>') + '</div>' +
     '<div class="field"><label>标签</label><div class="chips" id="fTags">' + tagPool.concat(d.tags.filter(function (t) { return tagPool.indexOf(t) < 0; })).map(function (t) { return '<button type="button" class="' + (d.tags.indexOf(t) >= 0 ? 'on' : '') + '" data-act="f-tag" data-t="' + esc(t) + '">' + esc(t) + '</button>'; }).join('') +
     '<input class="inp" id="fTagNew" placeholder="+ 自定义" style="width:96px;height:28px;font-size:12.5px;border-radius:999px" data-key="f-tag-new"></div></div>' +
     '<div class="field"><label>老师备注</label><textarea class="ta" id="fNote" maxlength="300" placeholder="学习习惯、薄弱点、上课注意事项等，写评语和家长沟通时 AI 会参考">' + esc(d.note) + '</textarea></div>' +
-    (S.settings.hr ? '<div id="fHrBox" class="' + (hrOn ? '' : 'hide') + '"><div class="hr"></div>' + hrFormHTML(d) + '</div>' : '');
+    '<div id="fHrBox"><div class="hr"></div>' + hrFormHTML(d) + '</div>';
   UI.modal({
     title: isNew ? '添加学生' : '编辑 · ' + stuNmH(st), body: body, wide: hrOn,
     foot: (isNew ? '<label class="chk" style="margin-right:auto"><input type="checkbox" id="fMore"> 保存后继续添加</label>' : '<button class="btn btn-ghost" data-act="stu-del" data-sid="' + d.id + '" style="margin-right:auto;color:var(--red)">' + ICON.trash + '删除</button>') +
@@ -5719,7 +5719,7 @@ UI.act['stu-import'] = function () {
   UI.modal({
     title: '批量导入学生', wide: true,
     body: '<div class="row2"><div class="field"><label>导入到</label><select class="sel" id="impCls">' + S.classes.map(function (c) { return '<option value="' + c.id + '"' + (c === cur ? ' selected' : '') + '>' + esc(c.name) + '</option>'; }).join('') + '</select><div class="hint">表里有「班级」列且名字对得上时，按表里的班级分</div></div></div>' +
-      '<p style="margin:0 0 10px;color:var(--ink2);line-height:1.7;font-size:13px">在 Excel 里选中名单（第一行是表头），复制后粘贴到下面；也可以选择 CSV 文件。能识别：姓名、性别、学号、班级、标签、职务、备注，只有「姓名」是必需的。' + (S.settings.hr ? '导入到班主任班时，还能识别生日、家长姓名、关系、家长电话、家庭结构、家庭备注、学习情况、性格、健康。' : '') + '</p>' +
+      '<p style="margin:0 0 10px;color:var(--ink2);line-height:1.7;font-size:13px">在 Excel 里选中名单（第一行是表头），复制后粘贴到下面；也可以选择 CSV 文件。能识别：姓名、性别、学号、班级、标签、职务、备注、生日、家长姓名、关系、家长电话、家庭结构、家庭备注、学习情况、性格、健康，只有「姓名」是必需的。</p>' +
       '<textarea class="ta" id="impText" style="min-height:180px;font-family:var(--num);font-size:12.5px" placeholder="学号	姓名	性别&#10;250301	张三	男&#10;250302	李四	女" data-inp="imp-preview"></textarea>' +
       '<div style="display:flex;align-items:center;gap:10px;margin-top:10px"><label class="btn btn-light btn-sm" style="cursor:pointer">' + ICON.up + '选择 CSV 文件<input type="file" accept=".csv,.txt" hidden data-chg="imp-file"></label><button class="btn btn-ghost btn-sm" data-act="imp-template">下载模板</button><span class="muted" id="impInfo" style="font-size:12.5px;margin-left:auto"></span></div>',
     foot: '<button class="btn btn-light" data-act="modal-close">取消</button><button class="btn btn-dark" data-act="imp-go">导入</button>'
@@ -5827,7 +5827,7 @@ function hrFormHTML(d) {
       '<div class="field"><label>电话</label><input class="inp num" id="fP' + i + 'p" value="' + esc(p.phone) + '" inputmode="tel"></div>' +
       '<div class="field"><label>职业</label><input class="inp" id="fP' + i + 'j" value="' + esc(p.job || '') + '"></div></div>';
   }
-  return '<div class="hr-form-head">' + ICON.flag + '班主任班档案<span class="muted">只有班主任班的同学需要填，写评语、家长沟通时 AI 会参考</span></div>' +
+  return '<div class="hr-form-head">' + ICON.flag + '学生档案<span class="muted">选填，写评语、家长沟通时 AI 会参考</span></div>' +
     '<div class="row3"><div class="field"><label>生日</label><input class="inp" type="date" id="fBday" value="' + esc(d.birthday || '') + '"></div>' +
     '<div class="field"><label>职务</label><input class="inp" id="fRole" value="' + esc(d.role || '') + '" list="roleList" placeholder="如：班长、数学课代表"></div>' +
     '<div class="field"><label>住宿</label><div class="seg light" id="fBoard"><button type="button" class="' + (!d.boarding ? 'on' : '') + '" data-act="f-board" data-v="0">走读</button><button type="button" class="' + (d.boarding ? 'on' : '') + '" data-act="f-board" data-v="1">住校</button></div></div></div>' +
@@ -6069,7 +6069,7 @@ function openClassForm(cid) {
   if (!c) { CF.lo.auto = true; CF.lo.side = { l: 0, r: 0 }; }
   var body = '<div class="row2"><div class="field"><label>班级名称<span class="req">*</span></label><input class="inp" id="cfName" value="' + esc(c ? c.name : '') + '" placeholder="如：初二（5）班" maxlength="20"' + (c ? '' : ' autofocus') + '></div>' +
     '<div class="field"><label>教室</label><input class="inp" id="cfRoom" value="' + esc(c ? c.room || '' : '') + '" placeholder="选填，排课时自动带上"></div></div>' +
-    cfHrHTML(c) + '<div class="flabel" style="margin:4px 0 10px">桌椅排列</div><div id="cfLayout"></div>';
+    '<div class="flabel" style="margin:4px 0 10px">桌椅排列</div><div id="cfLayout"></div>';
   if (c) {
     body += '<div class="hr"></div><div class="field" style="margin-bottom:0"><label>学生人数</label><div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><span style="font-size:15px;font-weight:600" class="num">' + c.students.length + ' 人</span><span class="muted" style="font-size:12px;margin-right:auto">人数跟着名单走，加减学生座位会自动调整</span>' +
       '<button type="button" class="btn btn-sm btn-light" data-act="cf-stu" data-to="add">' + ICON.userplus + '添加学生</button><button type="button" class="btn btn-sm btn-light" data-act="cf-stu" data-to="import">' + ICON.up + '批量导入</button><button type="button" class="btn btn-sm btn-ghost" data-act="cf-stu" data-to="list">管理名单</button></div></div>';
@@ -6137,7 +6137,7 @@ UI.act['cf-save'] = function () {
     S.classes.push(c);
     S.settings.cur = c.id;
     cfApplyHr(c);
-    UI.toast('已创建 ' + name + (isHr(c.id) ? '（班主任班）' : '') + (list.length ? '，导入 ' + list.length + ' 名学生' : '，接着可以添加学生'));
+    UI.toast('已创建 ' + name + (list.length ? '，导入 ' + list.length + ' 名学生' : '，接着可以添加学生'));
   }
   save(); UI.closeModal();
   if (UI.page === 'class') { Cls.view.fit = true; Cls.entered[c.id] = false; }
@@ -6198,7 +6198,7 @@ UI.register('scores', {
     var exs = S.exams.slice().sort(byDate).reverse();
     if (!Sc.exam || !examById(Sc.exam)) Sc.exam = exs.length ? exs[0].id : null;
     var subj = S.settings.teacher.subject || '本学科', hc = hrCls();
-    var h = '<div class="page scroll"><div class="page-head"><div><h1 class="page-title">成绩录入</h1><div class="page-desc">' + esc(subj) + ' · 一场考试可以包含几个班，按班分开录；分大题录入可以做试卷分析' + (hc ? '；班主任班 ' + esc(hc.name) + ' 还可以录其他科目' : '') + '</div></div><div class="grow"></div>' +
+    var h = '<div class="page scroll"><div class="page-head"><div><h1 class="page-title">成绩录入</h1><div class="page-desc">' + esc(subj) + ' · 一场考试可以包含几个班，按班分开录；分大题录入可以做试卷分析；还可以录其他科目' + '</div></div><div class="grow"></div>' +
       '<button class="btn btn-dark" data-act="exam-new">' + ICON.plus + '新建考试</button></div>';
     if (!exs.length) {
       h += '<div class="panel"><div class="empty">' + ART.teacherAvatar(S.settings.teacher, 72, false) + '还没有考试。新建一场考试，选好参考班级和满分，就能开始录入。<div style="margin-top:14px"><button class="btn btn-dark" data-act="exam-new">' + ICON.plus + '新建考试</button></div></div></div></div>';
@@ -6206,8 +6206,8 @@ UI.register('scores', {
     }
     h += '<div class="score-layout"><div class="exam-list">' + exs.map(function (e) {
       var p = examProgress(e), full = isHrFull(e);
-      return '<button class="exam-item' + (e.id === Sc.exam ? ' on' : '') + '" data-act="exam-pick" data-id="' + e.id + '"><div class="t">' + esc(e.name) + '<span class="tag gray" style="height:19px;font-size:11px">' + esc(e.type || '考试') + '</span>' + (full ? '<span class="tag red" style="height:19px;font-size:11px" title="班主任班录了各科成绩">班主任班全科</span>' : '') + '</div>' +
-        '<div class="m">' + esc(e.date) + ' · ' + (exOwn(e) ? e.cids.length + ' 个班 · ' + esc(subj) + ' ' + exFull(e) + (multiPart(e) ? '（' + e.parts.length + ' 项）' : '') + (full ? ' · 班主任班另录 ' + hrSubs(e).filter(function (x) { return !x.own; }).length + ' 科' : '') : '只有班主任班 · ' + hrSubs(e).length + ' 科（不含' + esc(subj) + '）') + '</div><div class="m">已录 ' + p.n + '/' + p.total + '</div><div class="prog"><i style="width:' + (p.total ? Math.round(p.n / p.total * 100) : 0) + '%"></i></div></button>';
+      return '<button class="exam-item' + (e.id === Sc.exam ? ' on' : '') + '" data-act="exam-pick" data-id="' + e.id + '"><div class="t">' + esc(e.name) + '<span class="tag gray" style="height:19px;font-size:11px">' + esc(e.type || '考试') + '</span>' + (full ? '<span class="tag red" style="height:19px;font-size:11px" title="录了各科成绩">全科</span>' : '') + '</div>' +
+        '<div class="m">' + esc(e.date) + ' · ' + (exOwn(e) ? e.cids.length + ' 个班 · ' + esc(subj) + ' ' + exFull(e) + (multiPart(e) ? '（' + e.parts.length + ' 项）' : '') + (full ? ' · 另录 ' + hrSubs(e).filter(function (x) { return !x.own; }).length + ' 科' : '') : '全科 · ' + hrSubs(e).length + ' 科（不含' + esc(subj) + '）') + '</div><div class="m">已录 ' + p.n + '/' + p.total + '</div><div class="prog"><i style="width:' + (p.total ? Math.round(p.n / p.total * 100) : 0) + '%"></i></div></button>';
     }).join('') + '</div><div id="scGrid"></div></div></div>';
     main.innerHTML = h;
     Sc.renderGrid();
@@ -6229,7 +6229,7 @@ Sc.renderGrid = function () {
   if (cids.indexOf(Sc.cid) < 0) { var cc = curCls(); Sc.cid = cc && cids.indexOf(cc.id) >= 0 ? cc.id : cids[0]; }
   var ri = rankInfo(ex), multi = multiPart(ex), many = cids.length > 1;
   var hrMode = isHr(Sc.cid) && (isHrFull(ex) || !exOwn(ex));
-  var h = '<div class="page-head" style="margin-bottom:12px"><div><div style="font-size:17px;font-weight:700">' + esc(ex.name) + '</div><div class="page-desc">' + esc(ex.date) + ' · ' + esc(ex.type || '') + (exOwn(ex) ? ' · ' + esc(ownName()) + ' 满分 ' + exFull(ex) + (multi ? '（' + ex.parts.map(function (p) { return esc(p.name) + ' ' + p.full; }).join('，') + '）' : '') : '') + (isHrFull(ex) ? ' · 班主任班全科满分 ' + hrFull(ex) : '') + '</div></div><div class="grow"></div>' +
+  var h = '<div class="page-head" style="margin-bottom:12px"><div><div style="font-size:17px;font-weight:700">' + esc(ex.name) + '</div><div class="page-desc">' + esc(ex.date) + ' · ' + esc(ex.type || '') + (exOwn(ex) ? ' · ' + esc(ownName()) + ' 满分 ' + exFull(ex) + (multi ? '（' + ex.parts.map(function (p) { return esc(p.name) + ' ' + p.full; }).join('，') + '）' : '') : '') + (isHrFull(ex) ? ' · 全科满分 ' + hrFull(ex) : '') + '</div></div><div class="grow"></div>' +
     '<button class="btn btn-light btn-sm" data-act="exam-edit" data-id="' + ex.id + '">' + ICON.edit + '编辑考试</button>' +
     '<button class="btn btn-light btn-sm" data-act="score-import" data-id="' + ex.id + '">' + ICON.up + '按表头导入</button>' +
     '<button class="btn btn-light btn-sm" data-act="score-export" data-id="' + ex.id + '">' + ICON.down + '导出</button>' +
@@ -6262,7 +6262,7 @@ function bindGrid(el) {
 /* 班主任班：我教的科目（可分项）+ 其他科目 + 全科总分和名次 */
 function hrGridHTML(ex, many) {
   var multi = multiPart(ex), own = exOwn(ex), subs = hrSubs(ex).filter(function (x) { return !x.own; }), hr = hrRank(ex), oi = rankInfo(ex);
-  var h = '<div class="paste-hint">' + ICON.flag + '<span>班主任班要录所有科目：' + (own ? esc(ownName()) + (multi ? '按分项录' : '') + '和' : '') + '其他 ' + subs.length + ' 科放在一张表里。从 Excel 复制一整块（按学号顺序、科目顺序和这里一样）点起始格子 <span class="kbd">Ctrl</span> + <span class="kbd">V</span> 就能填好。缺考填「缺」。</span></div>' +
+  var h = '<div class="paste-hint">' + ICON.flag + '<span>这个班要录所有科目：' + (own ? esc(ownName()) + (multi ? '按分项录' : '') + '和' : '') + '其他 ' + subs.length + ' 科放在一张表里。从 Excel 复制一整块（按学号顺序、科目顺序和这里一样）点起始格子 <span class="kbd">Ctrl</span> + <span class="kbd">V</span> 就能填好。缺考填「缺」。</span></div>' +
     '<div class="tbl-wrap" style="max-height:calc(100vh - ' + (many ? 300 : 250) + 'px)"><table class="tbl grid-tbl" data-mode="hr"><thead><tr><th>学号</th><th>姓名</th>';
   var cols = [];
   if (own) {
@@ -6371,11 +6371,11 @@ function examForm(ex) {
     '<div class="field"><label>考试日期<span class="req">*</span></label><input class="inp" type="date" id="exDate" value="' + esc(ex ? ex.date : todayStr()) + '"></div></div>' +
     '<div class="field"><label>类型</label><div class="chips" id="exType">' + EXAM_TYPES.map(function (t) { return '<button type="button" class="' + ((ex ? ex.type : '单元测') === t ? 'on' : '') + '" data-act="ex-type" data-t="' + t + '">' + t + '</button>'; }).join('') + '</div></div>' +
     '<div class="field"><label>参考班级</label><div class="chips" id="exCls">' + S.classes.map(function (c) { return '<button type="button" data-act="ex-cls" data-c="' + c.id + '" class="' + (chosen[c.id] ? 'on' : '') + '"><i class="cdot" style="background:' + clsColor(c) + ';margin-right:5px;vertical-align:0"></i>' + esc(c.name) + '</button>'; }).join('') + '</div><div class="hint">几个平行班一起考，分析时可以横向对比</div></div>' +
-    (hc ? '<div class="field ex-hr' + (chosen[hc.id] ? '' : ' hide') + '" id="exHrBox"><label>' + ICON.flag + ' 班主任班 ' + esc(hc.name) + ' 还要录哪些科目 <span class="muted" style="font-weight:400">选填，只在这个班录</span></label>' +
+    '<div class="field ex-hr" id="exHrBox"><label>' + ICON.flag + ' 还要录哪些科目 <span class="muted" style="font-weight:400">选填，每个班都可以录</span></label>' +
       '<div class="chips" id="exSubs">' + pool.map(function (x) { return '<button type="button" class="' + (subs[x.name] ? 'on' : '') + '" data-act="ex-sub" data-n="' + esc(x.name) + '">' + esc(x.name) + ' <span style="opacity:.6">' + x.full + '</span></button>'; }).join('') + '</div>' +
       '<div style="display:flex;gap:6px;margin-top:8px;align-items:center;flex-wrap:wrap"><button type="button" class="btn btn-xs btn-light" data-act="ex-sub-all" data-v="1">全选</button><button type="button" class="btn btn-xs btn-ghost" data-act="ex-sub-all" data-v="0">不选</button><span class="muted" style="font-size:12px;margin-left:6px">满分在 设置 → 成绩线与科目 里改</span></div>' +
       '<label class="chk" style="margin-top:10px"><input type="checkbox" id="exOwn" data-chg="ex-own"' + (Sc.form.own ? ' checked' : '') + '> 这场考试有我教的' + esc(me) + '</label>' +
-      '<div class="hint">选了其他科目，' + esc(hc.name) + ' 的成绩表会多出这几列，能算全科总分、名次和各科分析；其他班只录' + esc(me) + '。不勾「有我教的' + esc(me) + '」就是只有班主任班参加、只录其他科目的考试。</div></div>' : '') +
+      '<div class="hint">选了其他科目，这个班的成绩表会多出这几列，能算全科总分、名次和各科分析。不勾「有我教的' + esc(me) + '」就是只录其他科目的考试。</div></div>' +
     '<div id="exOwnBox" class="' + (Sc.form.own ? '' : 'hide') + '"><div class="row2"><div class="field"><label>' + esc(me) + '满分</label><input class="inp num" id="exFull" value="' + full + '" inputmode="numeric"' + (Sc.form.split ? ' disabled' : '') + '></div>' +
     '<div class="field"><label>录入方式</label><div class="seg light" id="exSplit"><button type="button" data-act="ex-split" data-v="0" class="' + (!Sc.form.split ? 'on' : '') + '">只录总分</button><button type="button" data-act="ex-split" data-v="1" class="' + (Sc.form.split ? 'on' : '') + '">按大题 / 题型录入</button></div></div></div>' +
     '<div id="exParts" class="' + (Sc.form.split ? '' : 'hide') + '"><div class="field"><label>分项与满分 <span class="muted" id="exPartSum" style="font-weight:400;margin-left:6px"></span></label><div class="sub-list" id="exPartList"></div>' +
@@ -6398,7 +6398,6 @@ Sc.partSum = function () { var s = sum(Sc.form.parts.map(function (p) { return +
 UI.act['ex-type'] = function (el) { $$('#exType button').forEach(function (b) { b.classList.toggle('on', b === el); }); };
 UI.act['ex-cls'] = function (el) {
   var c = el.getAttribute('data-c'); if (Sc.form.chosen[c]) delete Sc.form.chosen[c]; else Sc.form.chosen[c] = 1; el.classList.toggle('on', !!Sc.form.chosen[c]);
-  var box = $('#exHrBox'); if (box && isHr(c)) box.classList.toggle('hide', !Sc.form.chosen[c]);
 };
 UI.act['ex-sub'] = function (el) {
   var n = el.getAttribute('data-n'), x = Sc.form.pool.filter(function (p) { return p.name === n; })[0];
@@ -6435,11 +6434,10 @@ UI.act['exam-save'] = function (el) {
   if (!date) { UI.toast('请选择考试日期'); return; }
   var cids = S.classes.filter(function (c) { return Sc.form.chosen[c.id]; }).map(function (c) { return c.id; });
   if (!cids.length) { UI.toast('至少选一个班'); return; }
-  var hrId = S.settings.hr, withHr = !!hrId && cids.indexOf(hrId) >= 0, own = !withHr || Sc.form.own;
-  var subs = withHr ? Sc.form.pool.filter(function (p) { return Sc.form.subs[p.name]; }).map(function (p) { return { name: p.name, full: Sc.form.subs[p.name] }; }) : [];
+  var own = Sc.form.own;
+  var subs = Sc.form.pool.filter(function (p) { return Sc.form.subs[p.name]; }).map(function (p) { return { name: p.name, full: Sc.form.subs[p.name] }; });
   if (!own) {
     if (!subs.length) { UI.toast('不含' + ownName() + '的话，至少选一门其他科目'); return; }
-    cids = [hrId];
   }
   var type = ($('#exType .on') || {}).textContent || '其他', parts;
   if (!own) parts = id ? examById(id).parts : [{ name: '成绩', full: 100 }];
@@ -6627,7 +6625,7 @@ UI.register('analysis', {
     if (ex && list.indexOf(ex) < 0) { ex = null; An.exam = ''; }
     var data = list.filter(function (e) { return anHas(scope, e); });
     var h = '<div class="page scroll an-page">' + anHeadHTML(ex, data) + anScopeHTML() + (scope === 'own' ? anClsChips() : '') + anStripHTML(list, ex);
-    if (!data.length) h += '<div class="panel"><div class="empty">' + (scope === 'hr' ? esc(hc.name) + '还没有录入各科成绩的考试。新建考试时选上班主任班、勾选其他科目，录完这里就有了。' : '这里还没有' + esc(ownName()) + '成绩') + '<div style="margin-top:14px"><button class="btn btn-dark" data-act="go" data-page="scores">去录入成绩</button></div></div></div>';
+    if (!data.length) h += '<div class="panel"><div class="empty">' + (scope === 'hr' ? esc(hc.name) + '还没有录入各科成绩的考试。新建考试时勾选其他科目，录完这里就有了。' : '这里还没有' + esc(ownName()) + '成绩') + '<div style="margin-top:14px"><button class="btn btn-dark" data-act="go" data-page="scores">去录入成绩</button></div></div></div>';
     else if (!ex) h += scope === 'hr' ? hrOverviewHTML(data) : ownOverviewHTML(data);
     else if (!anHas(scope, ex)) h += '<div class="panel"><div class="empty">「' + esc(ex.name) + '」' + (scope === 'hr' ? esc(hc.name) : An.cid ? esc(clsById(An.cid).name) : '') + '还没有录入成绩<div style="margin-top:14px"><button class="btn btn-dark" data-act="an-entry" data-exam="' + ex.id + '">去录入这场考试</button></div></div></div>';
     else h += scope === 'hr' ? hrDetailHTML(ex) : ownDetailHTML(ex, An.cid || undefined);
@@ -6636,7 +6634,7 @@ UI.register('analysis', {
 });
 function anHeadHTML(ex, data) {
   var hc = hrCls(), scope = An.scope, desc;
-  if (scope === 'hr') desc = esc(hc.name) + ' · 班主任班，看各科成绩和总分';
+  if (scope === 'hr') desc = esc(hc.name) + ' · 全科成绩与总分';
   else desc = esc(ownName()) + ' · ' + (An.cid ? esc(clsById(An.cid).name) : '我教的 ' + S.classes.length + ' 个班') + ' · 只算' + esc(ownName()) + '这一科';
   var last = data[data.length - 1], target = ex || last, ai = '';
   if (target) ai = scope === 'hr' ? '<button class="btn btn-dark" data-act="ai-tpl" data-tpl="hr-report" data-exam="' + target.id + '">' + ICON.spark + 'AI 写全科成绩分析</button>'
@@ -6647,7 +6645,7 @@ function anScopeHTML() {
   var hc = hrCls(); if (!hc) return '';
   var nOwn = examsSorted().filter(function (e) { return exStats(e).n; }).length, nHr = hrFullExams().filter(function (e) { return hrStats(e).n; }).length;
   return '<div class="an-scope">' +
-    '<button class="' + (An.scope === 'hr' ? 'on' : '') + '" data-act="an-scope" data-v="hr"><i class="hr-flag">班</i><span><b>' + esc(hc.name) + '</b><small>班主任班 · 各科成绩 + 总分 · ' + nHr + ' 次考试</small></span></button>' +
+    '<button class="' + (An.scope === 'hr' ? 'on' : '') + '" data-act="an-scope" data-v="hr"><span><b>' + esc(hc.name) + '</b><small>全科 · 各科成绩 + 总分 · ' + nHr + ' 次考试</small></span></button>' +
     '<button class="' + (An.scope === 'own' ? 'on' : '') + '" data-act="an-scope" data-v="own"><i class="sub-flag">' + esc(ownName().slice(0, 1)) + '</i><span><b>我教的' + esc(ownName()) + '</b><small>' + S.classes.length + ' 个班 · 只看' + esc(ownName()) + ' · ' + nOwn + ' 次考试</small></span></button></div>';
 }
 function anClsChips() {
@@ -6671,7 +6669,7 @@ UI.act['an-scope'] = function (el) { An.scope = el.getAttribute('data-v'); An.ex
 UI.act['an-cls'] = function (el) { An.cid = el.getAttribute('data-c'); An.cmp = null; UI.rerender(); };
 UI.act['an-pick'] = function (el) { An.exam = el.getAttribute('data-id'); An.cmp = null; UI.rerender(); var m = $('#main .page'); if (m) m.scrollTop = 0; };
 UI.chg['an-cmp'] = function (el) { An.cmp = el.value; UI.rerender(); };
-UI.act['an-entry'] = function (el) { Sc.exam = el.getAttribute('data-exam'); Sc.cid = An.scope === 'hr' ? S.settings.hr : (An.cid || null); UI.go('scores'); };
+UI.act['an-entry'] = function (el) { Sc.exam = el.getAttribute('data-exam'); Sc.cid = An.scope === 'hr' ? (curCls() || {}).id : (An.cid || null); UI.go('scores'); };
 UI.act['an-mat'] = function (el) { An.mat = el.getAttribute('data-v'); UI.rerender(); };
 /* 从成绩录入、课堂跳过来：data-scope 指定哪一块，data-exam 是哪场考试 */
 UI.act['go-analysis'] = function (el) {
@@ -7322,7 +7320,7 @@ function renderAIHome(main) {
   var clsOpts = '<option value="">+ 班级情况</option>' + S.classes.map(function (c) { return '<option value="' + c.id + '"' + (AIP.ctx.cls === c.id ? ' selected' : '') + '>' + esc(c.name) + '</option>'; }).join('');
   var examOpts = '<option value="">+ 考试数据</option>' + S.exams.slice().sort(byDate).reverse().map(function (e) { return '<option value="' + e.id + '"' + (AIP.ctx.exam === e.id ? ' selected' : '') + '>' + esc(e.name) + '</option>'; }).join('');
   main.innerHTML = '<div class="ai-page"><div class="ai-home scroll"><div class="ai-wrap">' +
-    '<div class="ai-hello">' + aiAvatar(60) + '<div><h1>' + esc(t.subject || '') + '教学' + (hc ? ' · 班主任' : '') + '助理</h1><p>' + esc(t.name) + '，' + (hc ? '备课出题、成绩分析、班会和家校沟通、写评语' : '备课、出题、试卷分析、写评语') + '都可以交给我 · ' + apiPill() + '</p></div></div>' +
+    '<div class="ai-hello">' + aiAvatar(60) + '<div><h1>' + esc(t.subject || '') + '教学助理</h1><p>' + esc(t.name) + '，备课出题、成绩分析、班会和家校沟通、写评语都可以交给我 · ' + apiPill() + '</p></div></div>' +
     '<div class="composer"><textarea id="aiInput" placeholder="直接说要做什么，比如：帮我设计一节「' + esc(curTopic() || '平方差公式') + '」的导入，5 分钟以内，用生活里的例子" data-key="ai-send"></textarea>' +
     '<div class="composer-bar"><button class="ctx-chip' + (AIP.ctx.me ? ' on' : '') + '" data-act="ctx-me">' + (AIP.ctx.me ? ICON.check : ICON.plus) + '任教概况</button>' +
     '<select class="ctx-chip' + (AIP.ctx.cls ? ' on' : '') + '" data-chg="ctx-cls" style="' + chip + '">' + clsOpts + '</select>' +
@@ -7370,7 +7368,7 @@ UI.act['ai-tpl'] = function (el) {
   UI.closeDrawer(); UI.hideCard();
   var pre = { sid: el.getAttribute('data-sid'), exam: el.getAttribute('data-exam'), cmp: el.getAttribute('data-cmp'), cid: el.getAttribute('data-cid') };
   if (pre.sid && !pre.cid) { var sc = clsOfStu(pre.sid); if (sc) pre.cid = sc.id; }
-  if (tpl.hr && !pre.cid) pre.cid = S.settings.hr;
+  if (tpl.hr && !pre.cid) pre.cid = (curCls() || {}).id;
   var exs = examsSorted().reverse(), cur = curCls();
   var hasPick = tpl.fields.some(function (f) { return f[1] === 'students'; });
   var body = tpl.fields.map(function (f) {
@@ -7757,7 +7755,7 @@ function hrName() { var c = hrCls(); return c ? c.name : '本班'; }
 
 /* ---------- 模板（cat: hr，只在有班主任班时显示） ---------- */
 var HR_RED = '#e5483b', HR_AMBER = '#f2a71b', HR_TEAL = '#14b0a6';
-TPL_CATS.splice(1, 0, ['hr', '班主任']);
+TPL_CATS.splice(1, 0, ['hr', '我的班']);
 TPLS.push(
   { id: 'banhui', cat: 'hr', hr: 1, rec: 1, color: HR_TEAL, ico: '班', title: '班会课方案', desc: '主题班会的目标、流程、互动环节和班主任总结，可结合本班情况',
     fields: [['theme', 'text', '班会主题', '', '如：期中考试后的反思与调整', 1], ['dur', 'select', '时长', ['40 分钟', '45 分钟', '20 分钟']], ['form', 'select', '形式', ['讨论交流', '情景游戏', '演讲分享', '视频引导']], ['useClass', 'check', '参考本班情况（成绩、考勤、点评等，已隐去姓名）', true]],
@@ -7825,7 +7823,7 @@ function hrFieldHTML(type, key, lab, pre) {
    ========================================================= */
 var SetP = { sec: 'profile' };
 var DEV_MAIL = 'cyberdaddyleo@outlook.com';
-var SET_SECS = [['profile', '个人信息'], ['classes', '我教的班级'], ['homeroom', '班主任'], ['periods', '作息时间'], ['teach', '成绩线与点评'], ['ai', 'AI 接口'], ['data', '数据与备份'], ['about', '关于']];
+var SET_SECS = [['profile', '个人信息'], ['classes', '我教的班级'], ['homeroom', '全科与班级'], ['periods', '作息时间'], ['teach', '成绩线与点评'], ['ai', 'AI 接口'], ['data', '数据与备份'], ['about', '关于']];
 
 UI.register('settings', {
   render: function (main, opts) {
@@ -7861,21 +7859,17 @@ function renderSetBody() {
       '<div class="row3"><div class="field"><label>学期</label>' + sInp('term', st.term, '如：2026—2027 学年 第一学期') + '</div><div class="field"><label>开学日期</label>' + sInp('termStart', st.termStart, '', 'date') + '<div class="hint">用来算第几周、已上了多少节课</div></div><div class="field"><label>学期结束</label>' + sInp('termEnd', st.termEnd, '', 'date') + '<div class="hint">导出日历时，每周的课排到这一天</div></div></div>' +
       '<div class="row2"><div class="field"><label>倒计时名称</label>' + sInp('countdown.label', st.countdown.label, '如：期末考试 / 中考') + '</div><div class="field"><label>倒计时日期</label>' + sInp('countdown.date', st.countdown.date, '', 'date') + '<div class="hint">不在上课时间，教室智慧屏显示这个倒计时</div></div></div></div>';
   } else if (SetP.sec === 'classes') {
-    h += '<div class="panel set-sec"><div style="display:flex;align-items:flex-start;gap:12px"><div><div class="panel-title">我教的班级</div><div class="panel-sub">点「设置」可以改桌椅排列（单人单列 / 双人同桌 / 三人一排）；你当班主任的班可以在这里设为「班主任班」；圆点换颜色，颜色会用在课表、图表和班级标签上</div></div><span class="grow"></span><button class="btn btn-dark btn-sm" data-act="cls-new">' + ICON.plus + '新建班级</button></div>' +
-      (S.classes.length ? '<table class="tbl"><thead><tr><th style="width:44px">颜色</th><th>班级名称</th><th>教室</th><th>桌椅</th><th>班主任</th><th class="r">学生</th><th class="r">每周正课</th><th></th></tr></thead><tbody>' + S.classes.map(function (c, i) {
+    h += '<div class="panel set-sec"><div style="display:flex;align-items:flex-start;gap:12px"><div><div class="panel-title">我教的班级</div><div class="panel-sub">点「设置」可以改桌椅排列（单人单列 / 双人同桌 / 三人一排）；圆点换颜色，颜色会用在课表、图表和班级标签上</div></div><span class="grow"></span><button class="btn btn-dark btn-sm" data-act="cls-new">' + ICON.plus + '新建班级</button></div>' +
+      (S.classes.length ? '<table class="tbl"><thead><tr><th style="width:44px">颜色</th><th>班级名称</th><th>教室</th><th>桌椅</th><th class="r">学生</th><th class="r">每周正课</th><th></th></tr></thead><tbody>' + S.classes.map(function (c, i) {
         return '<tr><td><button class="cdot-btn" data-act="cls-color" data-id="' + c.id + '" title="换个颜色" style="background:' + clsColor(c) + '"></button></td>' +
           '<td><input class="inp" style="height:32px" value="' + esc(c.name) + '" data-inp="cls-field" data-id="' + c.id + '" data-k="name" maxlength="20"></td><td><input class="inp" style="height:32px" value="' + esc(c.room || '') + '" data-inp="cls-field" data-id="' + c.id + '" data-k="room" placeholder="选填，排课时自动带上"></td>' +
-          '<td class="sub" style="white-space:nowrap">' + layoutText(c) + '</td><td>' + (isHr(c.id) ? '<span class="tag red"><i class="hr-flag" style="margin-right:4px">班</i>班主任班</span>' : '<button class="btn btn-xs btn-ghost" data-act="hr-toggle" data-cid="' + c.id + '">设为班主任班</button>') + '</td><td class="r num"><a href="#" data-act="go" data-page="students" data-sec="' + c.id + '">' + c.students.length + ' 人</a></td><td class="r num">' + weeklyCount(c.id, '正课') + ' 节</td>' +
+          '<td class="sub" style="white-space:nowrap">' + layoutText(c) + '</td><td class="r num"><a href="#" data-act="go" data-page="students" data-sec="' + c.id + '">' + c.students.length + ' 人</a></td><td class="r num">' + weeklyCount(c.id, '正课') + ' 节</td>' +
           '<td class="r" style="white-space:nowrap"><button class="btn btn-xs btn-light" data-act="cls-edit" data-id="' + c.id + '">设置</button><button class="btn btn-xs btn-ghost" data-act="cls-move" data-id="' + c.id + '" data-d="-1"' + (i === 0 ? ' disabled' : '') + ' aria-label="上移">' + ICON.up + '</button><button class="btn btn-xs btn-ghost" data-act="cls-move" data-id="' + c.id + '" data-d="1"' + (i === S.classes.length - 1 ? ' disabled' : '') + ' aria-label="下移">' + ICON.down + '</button><button class="btn btn-xs btn-ghost" data-act="cls-del" data-id="' + c.id + '" style="color:var(--red)">删除</button></td></tr>';
       }).join('') + '</tbody></table>' : '<div class="empty" style="padding:30px 0">还没有班级，点右上角「新建班级」</div>') + '</div>';
   } else if (SetP.sec === 'homeroom') {
     var hc = hrCls();
-    h += '<div class="panel set-sec"><div class="panel-title">班主任班</div><div class="panel-sub">你当班主任的那个班：可以录所有科目的成绩、管学生档案、考勤、班级课表和值日表；其他班只看你教的' + esc(ownName()) + '</div>' +
-      (S.classes.length ? '<div class="field" style="max-width:360px"><select class="sel" data-chg="set-hr"><option value="">我不当班主任</option>' + S.classes.map(function (c) { return '<option value="' + c.id + '"' + (isHr(c.id) ? ' selected' : '') + '>' + esc(c.name) + '</option>'; }).join('') + '</select><div class="hint">也可以在课堂页的班级栏点「班主任」切换。换班或取消都不会删除数据</div></div>' +
-        (hc ? '<div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn btn-light btn-sm" data-act="ctt-open">' + ICON.cal + '班级课表</button><button class="btn btn-light btn-sm" data-act="duty-open">' + ICON.users + '值日表</button><button class="btn btn-light btn-sm" data-act="go" data-page="students" data-sec="' + hc.id + '">' + ICON.doc + '学生档案</button></div>' : '')
-        : '<div class="muted" style="font-size:13px">先在「我教的班级」里添加班级</div>') + '</div>';
     if (hc) {
-      h += '<div class="panel set-sec"><div class="panel-title">全科科目与满分</div><div class="panel-sub">新建考试时，班主任班可以勾选这些科目一起录。你教的' + esc(ownName()) + '会自动带上，不用加在这里</div><div class="sub-list">' +
+      h += '<div class="panel set-sec"><div class="panel-title">全科科目与满分</div><div class="panel-sub">新建考试时可以勾选这些科目一起录。你教的' + esc(ownName()) + '会自动带上，不用加在这里</div><div class="sub-list">' +
         '<span class="sub-item" title="你教的科目，满分在新建考试时填"><b style="font-weight:600">' + esc(ownName()) + '</b><span class="tag blue" style="height:20px;font-size:11px;margin-right:4px">我教</span></span>' +
         st.subjects.map(function (x, i) { if (x.name === ownName()) return ''; return '<span class="sub-item">' + esc(x.name) + '<input value="' + x.full + '" data-inp="set-sub-full" data-i="' + i + '" aria-label="' + esc(x.name) + '满分"><button data-act="set-sub-del" data-i="' + i + '" aria-label="删除' + esc(x.name) + '">×</button></span>'; }).join('') + '</div>' +
         '<div style="display:flex;gap:6px;margin-top:12px;flex-wrap:wrap"><input class="inp" id="newSub" placeholder="科目名" style="width:140px;height:32px" maxlength="8"><input class="inp num" id="newSubFull" value="100" style="width:72px;height:32px"><button class="btn btn-light btn-sm" data-act="set-sub-add">添加科目</button><button class="btn btn-ghost btn-sm" data-act="set-sub-preset">按' + esc(st.stage) + '重置</button></div></div>';
@@ -7927,8 +7921,8 @@ function renderSetBody() {
       '<div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn btn-dark" data-act="backup">' + ICON.down + '导出备份</button><label class="btn btn-light" style="cursor:pointer">' + ICON.up + '从备份恢复<input type="file" accept=".json" hidden data-chg="restore"></label></div></div>' +
       '<div class="panel set-sec"><div class="panel-title">重新开始</div><div class="panel-sub">以下操作会覆盖当前数据，建议先导出备份</div><div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn btn-light" data-act="load-demo">载入示例数据</button><button class="btn btn-light" data-act="wipe" style="color:var(--red)">' + ICON.trash + '清空全部数据</button></div></div>';
   } else if (SetP.sec === 'about') {
-    h += '<div class="panel set-sec"><div style="display:flex;gap:14px;align-items:center">' + brandMark().replace('class="brand-mark"', 'class="brand-mark" style="width:52px;height:52px"') + '<div><div style="font-size:18px;font-weight:700">教师班主任工作台</div><div class="muted" style="font-size:13px">个人工作台系列 · 第 1 期 · v' + VERSION + '</div></div></div>' +
-      '<div style="font-size:13.5px;line-height:1.9;color:var(--ink2);margin-top:14px">给当班主任、同时也教课的老师：自己教的每个班有课表与调课、教学进度、作业登记、单科成绩和平行班对比；当班主任的那个班还能管所有科目的成绩、学生档案、考勤、班级课表和值日表。外加可接入任意大模型的 AI 助手。所有数据都留在你自己的电脑上。<br>开源版只做 PC 端；手机端和更多职业版本会陆续推出。</div>' +
+    h += '<div class="panel set-sec"><div style="display:flex;gap:14px;align-items:center">' + brandMark().replace('class="brand-mark"', 'class="brand-mark" style="width:52px;height:52px"') + '<div><div style="font-size:18px;font-weight:700">教师工作台</div><div class="muted" style="font-size:13px">个人工作台系列 · 第 1 期 · v' + VERSION + '</div></div></div>' +
+      '<div style="font-size:13.5px;line-height:1.9;color:var(--ink2);margin-top:14px">给独立教师用：每个班都有课表与调课、教学进度、作业登记、学生档案、考勤、全科成绩、成绩分析、班级课表和值日表，班与班之间可以横向对比。外加可接入任意大模型的 AI 助手。所有数据都留在你自己的电脑上。<br>开源版只做 PC 端；手机端和更多职业版本会陆续推出。</div>' +
       '<div style="font-size:13px;line-height:1.8;color:var(--ink2);margin-top:12px;padding:12px 14px;background:var(--fill);border-radius:12px"><b style="color:var(--ink)">开源协议</b><br>个人可以免费使用、修改和二次开发，分享时请保留作者署名和协议；禁止任何形式的商业使用。完整条款见随软件附带的 LICENSE 文件。</div>' +
       '<div class="dev-info"><b>开发者</b><div class="info-grid"><div class="k">全网渠道</div><div>@赛博老爸</div>' +
       '<div class="k">商用及合作开发</div><div class="dev-mail"><a href="mailto:' + DEV_MAIL + '">' + DEV_MAIL + '</a><button class="btn btn-xs btn-light" data-act="copy-txt" data-t="' + DEV_MAIL + '">复制</button></div></div></div>' +
@@ -8017,7 +8011,7 @@ UI.act['ai-test'] = function () {
 UI.act['backup'] = function () {
   S.settings.lastBackup = Date.now(); save(true);
   var d = new Date();
-  downloadFile('教师班主任工作台备份-' + (S.settings.teacher.name || '') + '-' + todayStr() + '-' + pad2(d.getHours()) + pad2(d.getMinutes()) + '.json', JSON.stringify(S, null, 1), 'application/json');
+  downloadFile('教师工作台备份-' + (S.settings.teacher.name || '') + '-' + todayStr() + '-' + pad2(d.getHours()) + pad2(d.getMinutes()) + '.json', JSON.stringify(S, null, 1), 'application/json');
   UI.toast('备份已下载，请妥善保存');
   if (UI.page === 'settings') renderSetBody();
 };
@@ -8062,11 +8056,11 @@ function showWelcome() {
   var el = document.createElement('div'); el.className = 'welcome'; el.id = 'welcome';
   el.innerHTML = '<div class="welcome-in">' +
     '<div style="display:flex;justify-content:center;margin-bottom:18px">' + brandMark().replace('class="brand-mark"', 'class="brand-mark" style="width:48px;height:48px"') + '</div>' +
-    '<h1>你好，我是你的教师班主任工作台</h1><p class="lead">先选一个你的形象，它会站在每个班的讲台上</p>' +
+    '<h1>你好，我是你的教师工作台</h1><p class="lead">先选一个你的形象，它会站在每个班的讲台上</p>' +
     '<div class="w-avatars">' + ['F', 'M'].map(function (g) { return '<button class="' + (Welcome.g === g ? 'on' : '') + '" data-act="w-g" data-g="' + g + '"><span class="circle">' + ART.teacherAvatar({ gender: g }, 96, false) + '</span>' + (g === 'F' ? '女老师' : '男老师') + '</button>'; }).join('') + '</div>' +
     '<div class="w-form"><div class="field"><label>怎么称呼你</label><input class="inp" id="wName" placeholder="如：李老师" value="' + (Welcome.g === 'F' ? '李老师' : '王老师') + '"></div><div class="field"><label>任教学科</label><input class="inp" id="wSub" placeholder="如：数学" value="数学"></div></div>' +
-    '<div class="w-mode"><button class="' + (Welcome.mode === 'demo' ? 'on' : '') + '" data-act="w-mode" data-m="demo"><b>先看看示例数据</b>3 个班，其中 3 班是班主任班：课表、全科成绩、考勤和值日表，随时可以清空</button><button class="' + (Welcome.mode === 'blank' ? 'on' : '') + '" data-act="w-mode" data-m="blank"><b>直接用我的班级</b>填上任教的班，再导入学生、排课表</button></div>' +
-    '<div id="wBlank" class="' + (Welcome.mode === 'blank' ? '' : 'hide') + '" style="max-width:440px;margin:-12px auto 22px;text-align:left"><div class="field"><label>我教的班级</label><input class="inp" id="wClass" placeholder="多个班用顿号隔开，如：初二（3）班、初二（5）班"><label class="chk" style="margin-top:8px"><input type="checkbox" id="wHr" checked> 第一个班是我当班主任的班</label></div><div class="row2"><div class="field"><label>学段</label><select class="sel" id="wStage"><option>小学</option><option selected>初中</option><option>高中</option></select></div><div class="field"><label>课桌</label><div class="seg light" id="wPer">' + DESK_PER.map(function (d) { return '<button type="button" class="' + (Welcome.per === d[0] ? 'on' : '') + '" data-act="w-per" data-v="' + d[0] + '">' + d[1] + '</button>'; }).join('') + '</div></div></div></div>' +
+    '<div class="w-mode"><button class="' + (Welcome.mode === 'demo' ? 'on' : '') + '" data-act="w-mode" data-m="demo"><b>先看看示例数据</b>3 个班：课表、全科成绩、考勤和值日表，随时可以清空</button><button class="' + (Welcome.mode === 'blank' ? 'on' : '') + '" data-act="w-mode" data-m="blank"><b>直接用我的班级</b>填上你的班，再导入学生、排课表</button></div>' +
+    '<div id="wBlank" class="' + (Welcome.mode === 'blank' ? '' : 'hide') + '" style="max-width:440px;margin:-12px auto 22px;text-align:left"><div class="field"><label>我教的班级</label><input class="inp" id="wClass" placeholder="多个班用顿号隔开，如：初二（3）班、初二（5）班"><label class="chk" style="margin-top:8px;display:none"><input type="checkbox" id="wHr" checked></label></div><div class="row2"><div class="field"><label>学段</label><select class="sel" id="wStage"><option>小学</option><option selected>初中</option><option>高中</option></select></div><div class="field"><label>课桌</label><div class="seg light" id="wPer">' + DESK_PER.map(function (d) { return '<button type="button" class="' + (Welcome.per === d[0] ? 'on' : '') + '" data-act="w-per" data-v="' + d[0] + '">' + d[1] + '</button>'; }).join('') + '</div></div></div></div>' +
     '<button class="btn btn-dark w-go" data-act="w-go">开启工作台</button>' +
     '<div class="w-restore">升级了新版本、换了电脑？<label>' + ICON.up + '从备份恢复<input type="file" accept=".json" hidden data-chg="restore"></label>，选之前导出的备份文件，数据就都回来了</div>' +
     '<div class="muted" style="font-size:12px;margin-top:16px">' + ICON.lock.replace('width="14" height="14"', 'width="12" height="12" style="display:inline;vertical-align:-1px"') + ' 所有数据只保存在这台电脑的浏览器里</div><div class="sign" style="padding-top:28px">Developed by @赛博老爸</div></div>';
@@ -8098,7 +8092,7 @@ UI.act['w-go'] = function () {
     S.classes = names.map(function (n, i) { return { id: uid('c'), name: n.slice(0, 20), room: '', color: i % CLASS_COLORS.length, students: [], layout: normLayout({ per: Welcome.per }) }; });
     S.settings.cur = S.classes[0].id;
     S.settings.subjects = subjectsPreset(stg);
-    if ($('#wHr').checked) S.settings.hr = S.classes[0].id;
+    if ($('#wHr') && $('#wHr').checked) S.settings.hr = S.classes[0].id;
   }
   S.settings.onboarded = true;
   save(true);
@@ -8117,7 +8111,7 @@ function boot() {
   /* 本版修改：满 7 天没导出备份就在顶部提醒一次 */
   GUARD.checkBackup();
   if (S.from) {   // 刚从旧版接过来的数据：提示一次，并存成新版
-    var msg = { 'v1.1': '已把班主任工作台 v1.1 的数据升级到新版：原来的班设为班主任班，学生、座位、成绩、考勤都在', 'rk': '已接上任课教师工作台的数据。在班级栏点「班主任」，设置你当班主任的班', 'merge': '已把班主任工作台 v1.1 和任课教师工作台的数据合并到一起：' + (hrCls() ? hrCls().name : '') + ' 设为班主任班', 'demo': '已载入新版示例数据' }[S.from];
+    var msg = { 'v1.1': '已把旧版班主任工作台 v1.1 的数据升级到新版：学生、座位、成绩、考勤都在', 'rk': '已接上任课教师工作台的数据，可以接着用了', 'merge': '已把旧版班主任工作台 v1.1 和任课教师工作台的数据合并到一起', 'demo': '已载入新版示例数据' }[S.from];
     delete S.from; save(true);
     if (msg) setTimeout(function () { UI.toast(msg, 6000); }, 900);
   }
