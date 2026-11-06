@@ -2098,7 +2098,15 @@ function migrate(s) {
   s.records = s.records.filter(function (r) { return r && r.sid; });
   Object.keys(s.attendance).forEach(function (k) { if (!s.attendance[k] || typeof s.attendance[k] !== 'object') s.attendance[k] = {}; });
   if (!Array.isArray(s.settings.subjects) || !s.settings.subjects.length) s.settings.subjects = subjectsPreset(s.settings.stage);
-  s.settings.subjects = s.settings.subjects.filter(function (x) { return x && x.name; }).map(function (x) { return { name: x.name, full: +x.full > 0 ? +x.full : 100 }; });
+  s.settings.subjects = s.settings.subjects.filter(function (x) { return x && x.name; }).map(function (x) { return { name: x.name, full: +x.full > 0 ? +x.full : 100, w: typeof x.w === 'number' && x.w >= 0 ? x.w : defaultWeight(x.name) }; });
+  /* 一次性升级：语数英满分 120 → 150（含历史考试的科目满分） */
+  if (+s.settings.wVer !== 2) {
+    ['语文', '数学', '英语'].forEach(function (nm) {
+      s.settings.subjects.forEach(function (x) { if (x.name === nm && x.full === 120) x.full = 150; });
+    });
+    (s.exams || []).forEach(function (e) { (e.subs || []).forEach(function (x) { if (['语文', '数学', '英语'].indexOf(x.name) >= 0 && x.full === 120) x.full = 150; }); });
+    s.settings.wVer = 2;
+  }
   if (typeof s.settings.hrNote !== 'string') s.settings.hrNote = '';
   s.classes = s.classes.filter(function (c) { return c && c.id && c.name; });
   s.classes.forEach(function (c, i) {
@@ -2658,7 +2666,7 @@ function clsRankIn(ex, cid) {
    ========================================================= */
 var SUBJECT_PRESETS = {
   '小学': [['语文', 100], ['数学', 100], ['英语', 100], ['科学', 100], ['道法', 100]],
-  '初中': [['语文', 120], ['数学', 120], ['英语', 120], ['物理', 100], ['化学', 100], ['道法', 100], ['历史', 100], ['地理', 100], ['生物', 100]],
+  '初中': [['语文', 150], ['数学', 150], ['英语', 150], ['物理', 100], ['化学', 100], ['道法', 100], ['历史', 100], ['地理', 100], ['生物', 100]],
   '高中': [['语文', 150], ['数学', 150], ['英语', 150], ['物理', 100], ['化学', 100], ['生物', 100], ['政治', 100], ['历史', 100], ['地理', 100]]
 };
 var CTT_EXTRA = ['体育', '音乐', '美术', '信息', '班会', '自习', '劳动', '心理', '阅读'];
@@ -2667,7 +2675,15 @@ var RECORD_TYPES = ['表扬', '谈话', '家访', '获奖', '提醒', '其他'];
 var ROLES = ['班长', '副班长', '学习委员', '纪律委员', '体育委员', '文艺委员', '劳动委员', '宣传委员', '心理委员', '语文课代表', '数学课代表', '英语课代表', '物理课代表', '化学课代表', '小组长'];
 var HR_TAGS = ['留守', '单亲', '近视', '过敏', '体育特长', '文艺特长', '心理关注', '困难帮扶'];
 var ATT = { leave: { t: '请假', tone: 'amber' }, absent: { t: '缺勤', tone: 'red' }, late: { t: '迟到', tone: 'blue' } };
-function subjectsPreset(stage) { return (SUBJECT_PRESETS[stage] || SUBJECT_PRESETS['初中']).map(function (x) { return { name: x[0], full: x[1] }; }); }
+/* 计入总分的折算系数：物理 ×0.9、化学 ×0.6；语数英 ×1；其余副科 ×0 表示只记录、不算进总分 */
+var SUBJECT_WEIGHTS = { '物理': 0.9, '化学': 0.6, '语文': 1, '数学': 1, '英语': 1 };
+function defaultWeight(name) { return Object.prototype.hasOwnProperty.call(SUBJECT_WEIGHTS, name) ? SUBJECT_WEIGHTS[name] : 0; }
+function subWeight(name) {
+  var a = (S.settings && S.settings.subjects) || [];
+  for (var i = 0; i < a.length; i++) if (a[i].name === name && typeof a[i].w === 'number') return a[i].w;
+  return defaultWeight(name);
+}
+function subjectsPreset(stage) { return (SUBJECT_PRESETS[stage] || SUBJECT_PRESETS['初中']).map(function (x) { return { name: x[0], full: x[1], w: defaultWeight(x[0]) }; }); }
 
 /* ---------- 我的班（本版修改：不再区分任课班 / 班主任班，所有班级都由我自己管理） ---------- */
 function hrCls() { return curCls(); }
@@ -2692,14 +2708,21 @@ function hrSubs(ex) {
   (ex.subs || []).forEach(function (s) { if (!exOwn(ex) || s.name !== me) out.push({ name: s.name, full: s.full }); });
   return out;
 }
-function hrFull(ex) { return sum(hrSubs(ex).map(function (s) { return s.full; })); }
+function hrFull(ex) { return round1(sum(hrSubs(ex).filter(function (s) { return subWeight(s.name) > 0; }).map(function (s) { return s.full * subWeight(s.name); }))); }
 /* 返回分数；null = 缺考；undefined = 还没录 */
 function hrVal(ex, sid, sub) {
   if (sub.own) { var t = stuTotal(ex, sid); if (t !== null) return t; return stuAbsent(ex, sid) ? null : undefined; }
   var r = ex.ss && ex.ss[sid]; return r ? r[sub.name] : undefined;
 }
 function hrRow(ex, sid) { var o = {}; hrSubs(ex).forEach(function (s) { o[s.name] = hrVal(ex, sid, s); }); return o; }
-function hrTotalOf(ex, sid) { var t = 0, n = 0; hrSubs(ex).forEach(function (s) { var v = hrVal(ex, sid, s); if (typeof v === 'number') { t += v; n++; } }); return n ? t : null; }
+function hrTotalOf(ex, sid) {
+  var t = 0, n = 0;
+  hrSubs(ex).forEach(function (s) {
+    var w = subWeight(s.name); if (!(w > 0)) return;
+    var v = hrVal(ex, sid, s); if (typeof v === 'number') { t += v * w; n++; }
+  });
+  return n ? round1(t) : null;
+}
 function setSub(ex, sid, name, v) {
   if (!ex.ss) ex.ss = {};
   if (!ex.ss[sid]) ex.ss[sid] = {};
@@ -6006,7 +6029,10 @@ function hrGridHTML(ex, many) {
     else cols.push({ k: 'own', name: ex.parts[0].name, full: ex.parts[0].full, label: ownName() });
   }
   subs.forEach(function (sb) { cols.push({ k: 'ss', name: sb.name, full: sb.full, label: sb.name }); });
-  h += cols.map(function (c) { return '<th class="c' + (c.k === 'own' ? ' own-col' : '') + '">' + esc(c.label) + ' <small>' + c.full + '</small></th>'; }).join('') + (own && multi ? '<th class="c">' + esc(ownName()) + '合计</th>' : '') + '<th class="c">全科总分</th><th class="c">班级名次</th></tr></thead><tbody>';
+  h += cols.map(function (c) {
+    var w = c.k === 'ss' ? subWeight(c.name) : 1;
+    return '<th class="c' + (c.k === 'own' ? ' own-col' : '') + '">' + esc(c.label) + ' <small>' + c.full + (w !== 1 ? ' ×' + w : '') + '</small></th>';
+  }).join('') + (own && multi ? '<th class="c">' + esc(ownName()) + '合计</th>' : '') + '<th class="c">全科总分<small>折算</small></th><th class="c">班级名次</th></tr></thead><tbody>';
   var list = studentsOf(Sc.cid);
   if (!list.length) h += '<tr><td colspan="' + (cols.length + 5) + '"><div class="empty">这个班还没有学生，先去「学生名单」导入</div></td></tr>';
   list.forEach(function (st, ri2) {
@@ -7598,7 +7624,15 @@ function renderSetBody() {
     if (hc) {
       h += '<div class="panel set-sec"><div class="panel-title">全科科目与满分</div><div class="panel-sub">新建考试时可以勾选这些科目一起录。你教的' + esc(ownName()) + '会自动带上，不用加在这里</div><div class="sub-list">' +
         '<span class="sub-item" title="你教的科目，满分在新建考试时填"><b style="font-weight:600">' + esc(ownName()) + '</b><span class="tag blue" style="height:20px;font-size:11px;margin-right:4px">我教</span></span>' +
-        st.subjects.map(function (x, i) { if (x.name === ownName()) return ''; return '<span class="sub-item">' + esc(x.name) + '<input value="' + x.full + '" data-inp="set-sub-full" data-i="' + i + '" aria-label="' + esc(x.name) + '满分"><button data-act="set-sub-del" data-i="' + i + '" aria-label="删除' + esc(x.name) + '">×</button></span>'; }).join('') + '</div>' +
+        st.subjects.map(function (x, i) {
+          if (x.name === ownName()) return '';
+          return '<span class="sub-item" title="满分 · 折算系数">' + esc(x.name) +
+            '<input value="' + x.full + '" data-inp="set-sub-full" data-i="' + i + '" aria-label="' + esc(x.name) + '满分" title="满分">' +
+            '<span style="opacity:.55;font-size:11px">×</span>' +
+            '<input value="' + (typeof x.w === 'number' ? x.w : 1) + '" data-inp="set-sub-w" data-i="' + i + '" aria-label="' + esc(x.name) + '折算系数" title="计入总分的系数：0.9 打九折，0 表示不计入总分" style="width:36px">' +
+            '<button data-act="set-sub-del" data-i="' + i + '" aria-label="删除' + esc(x.name) + '">×</button></span>';
+        }).join('') + '</div>' +
+        '<div class="muted" style="font-size:12px;margin-top:8px">第二个数字是折算系数：物理 0.9、化学 0.6，语数英填 1；副科填 0 就只记录成绩、不算进总分。总分满分按「满分 × 系数」相加。</div>' +
         '<div style="display:flex;gap:6px;margin-top:12px;flex-wrap:wrap"><input class="inp" id="newSub" placeholder="科目名" style="width:140px;height:32px" maxlength="8"><input class="inp num" id="newSubFull" value="100" style="width:72px;height:32px"><button class="btn btn-light btn-sm" data-act="set-sub-add">添加科目</button><button class="btn btn-ghost btn-sm" data-act="set-sub-preset">按' + esc(st.stage) + '重置</button></div></div>';
       h += '<div class="panel set-sec"><div class="panel-title">黑板 · 今日事项</div><div class="panel-sub">写在课堂黑板右侧，一行一条</div>' +
         '<textarea class="ta" style="max-width:520px;min-height:84px" data-inp="set" data-path="hrNote" placeholder="如：周五前交秋游安全回执">' + esc(st.hrNote || '') + '</textarea></div>';
@@ -7671,11 +7705,12 @@ function renderSetBody() {
 UI.chg['set-stage'] = function (el) { S.settings.stage = el.value; save(); };
 UI.chg['set-hr'] = function (el) { setHr(el.value); if (!el.value && Cls.mode === 'att') Cls.mode = 'daily'; UI.refreshSide(); renderSetBody(); UI.toast(el.value ? clsById(el.value).name + ' 已设为班主任班' : '已取消班主任班，数据都保留'); };
 UI.inp['set-sub-full'] = function (el) { var v = parseFloat(el.value); if (v > 0) { S.settings.subjects[+el.getAttribute('data-i')].full = v; save(); } };
+UI.inp['set-sub-w'] = function (el) { var v = parseFloat(el.value); if (!isNaN(v) && v >= 0) { S.settings.subjects[+el.getAttribute('data-i')].w = v; save(); } };
 UI.act['set-sub-del'] = function (el) { S.settings.subjects.splice(+el.getAttribute('data-i'), 1); save(); renderSetBody(); };
 UI.act['set-sub-add'] = function () {
   var n = $('#newSub').value.trim(), f = parseFloat($('#newSubFull').value) || 100; if (!n) { $('#newSub').focus(); return; }
   if (n === ownName()) { UI.toast(n + ' 是你教的科目，会自动带上'); return; }
-  if (!S.settings.subjects.some(function (x) { return x.name === n; })) S.settings.subjects.push({ name: n, full: f });
+  if (!S.settings.subjects.some(function (x) { return x.name === n; })) S.settings.subjects.push({ name: n, full: f, w: defaultWeight(n) });
   save(); renderSetBody();
 };
 UI.act['set-sub-preset'] = function () { S.settings.subjects = subjectsPreset(S.settings.stage); save(); renderSetBody(); UI.toast('已按' + S.settings.stage + '重置科目'); };
