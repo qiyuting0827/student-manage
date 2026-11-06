@@ -2046,7 +2046,7 @@ var PERIOD_PRESETS = {
 };
 function periodsPreset(stage) { return (PERIOD_PRESETS[stage] || PERIOD_PRESETS['初中']).map(function (p, i) { return { id: 'p' + i, name: p[0], start: p[1], end: p[2] }; }); }
 function defaultFull(stage, subject) {
-  if (/语文|数学|英语/.test(subject || '')) return stage === '高中' ? 150 : stage === '初中' ? 120 : 100;
+  if (/语文|数学|英语/.test(subject || '')) return stage === '小学' ? 100 : 150;
   return 100;
 }
 var CLASS_COLORS = ['#2f7ff0', '#e5483b', '#14b0a6', '#f2a71b', '#7a5af5', '#3ea35c', '#e2569a', '#8a6d3b'];
@@ -2107,6 +2107,27 @@ function migrate(s) {
     });
     (s.exams || []).forEach(function (e) { (e.subs || []).forEach(function (x) { if (['语文', '数学', '英语'].indexOf(x.name) >= 0 && x.full === 120) x.full = 150; }); });
     s.settings.wVer = 2;
+  }
+  /* 一次性升级：我教的语数英考试，分项合计 120 → 150（分数按比例换算） */
+  if (+s.settings.wVer !== 3) {
+    var __own = s.settings.teacher && s.settings.teacher.subject;
+    if (/语文|数学|英语/.test(__own || '')) {
+      (s.exams || []).forEach(function (e) {
+        if (e.own === false) return;
+        var tot = 0; e.parts.forEach(function (p) { tot += +p.full || 0; });
+        if (tot !== 120) return;
+        var f = 150 / 120, acc = 0;
+        e.parts.forEach(function (p, i) {
+          var nf = i === e.parts.length - 1 ? 150 - acc : Math.round(p.full * f);
+          acc += nf; p.full = nf;
+        });
+        Object.keys(e.scores || {}).forEach(function (sid) {
+          var row = e.scores[sid];
+          Object.keys(row).forEach(function (k) { if (typeof row[k] === 'number') row[k] = round1(row[k] * f); });
+        });
+      });
+    }
+    s.settings.wVer = 3;
   }
   if (typeof s.settings.hrNote !== 'string') s.settings.hrNote = '';
   s.classes = s.classes.filter(function (c) { return c && c.id && c.name; });
