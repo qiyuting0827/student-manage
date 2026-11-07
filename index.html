@@ -1901,7 +1901,7 @@ var ART = (function () {
 /* =========================================================
    CORE · 工具函数、存储、数据模型（多班级）、示例数据、查询与统计
    ========================================================= */
-var VERSION = '2.5.2';
+var VERSION = '2.6.0';
 var STORE_KEY = 'bzr-workbench-v2';
 /* 旧版本的数据：v1.1 班主任工作台（单个班）、任课教师工作台。第一次打开 v2.0 时自动接过来，旧数据原样保留 */
 var LEGACY_KEYS = ['bzr-workbench-v1', 'rk-workbench-v1'];
@@ -3343,8 +3343,6 @@ var UI = {
       '<div class="search">' + ICON.search + '<input id="gsearch" placeholder="搜索学生姓名 / 学号" autocomplete="off" data-inp="gsearch" data-key="gsearch"><div id="gsearchPop"></div></div>' +
       '<nav class="nav">' +
       navItem('class', ICON.room, '课堂') +
-      navItem('timetable', ICON.cal, '课表') +
-      navItem('progress', ICON.flag, '教学进度') +
       navItem('scores', ICON.edit, '成绩录入') +
       navItem('analysis', ICON.chart, '成绩分析') +
       navItem('students', ICON.users, '学生名单', allStudents().length) +
@@ -3918,7 +3916,7 @@ function boardData(c) {
     if (pr.cur) left.push('本节：' + pr.cur.name); else left.push('本学期课题已全部完成');
     if (pr.next) left.push('下节：' + pr.next.name);
     left.push('进度 ' + pr.done + ' / ' + pr.n + ' 个课题');
-  } else left = ['还没有设置教学进度', '可以到「教学进度」添加课题'];
+  } else left = ['还没有设置课题', '课题清单已下线，暂不可编辑'];
   var o = screenData(c);
   o.leftTitle = '教学进度'; o.leftLines = left; o.rightTitle = '今日事项'; o.rightLines = right;
   o.lTitle = '课堂之星'; o.stars = weekStars(c); o.rTitle = '进步之星'; o.rColor = '#1d9a57'; o.bdays = riseStars(c);
@@ -4088,7 +4086,7 @@ function clsStatusText(c) {
   if (cl) return '<i class="live"></i>上课中 · ' + esc(cl.p.name) + ' · 还剩 ' + Math.max(1, Math.ceil(timeMin(cl.p.end) - nowMin())) + ' 分钟';
   var nx = nextLesson(c.id);
   if (nx) return '下次上课：' + dayLabel(nx.ds) + ' ' + esc(nx.p.name) + ' ' + esc(nx.p.start) + (nx.changed ? ' <span class="tag amber" style="height:18px;font-size:11px">调课</span>' : '');
-  return weeklyCount(c.id) ? '近期没有这个班的课' : '课表里还没有这个班的课 · <a href="#/timetable" data-act="go" data-page="timetable">去排课表</a>';
+  return weeklyCount(c.id) ? '近期没有这个班的课' : '还没有排课';
 }
 function renderClsBar() {
   var el = $('#clsBar'); if (!el) return;
@@ -4150,7 +4148,7 @@ function teacherCardHTML() {
     '<div class="hc-status"><i></i>今天 ' + today.length + ' 节课' + (today.length ? '，还剩 ' + left + ' 节' : '') + '</div></div></div>' +
     '<div class="hc-sec"><div class="hc-k">每周：</div><div class="hc-v">' + week + ' 节正课 · ' + S.classes.map(function (c) { return esc(c.name) + ' ' + weeklyCount(c.id, '正课') + ' 节'; }).join('，') + '</div></div>' +
     '<div class="hc-sec"><div class="hc-k">AI 能帮你：</div><div class="tags"><span class="tag">写教案</span><span class="tag">分层作业</span><span class="tag">试卷分析</span><span class="tag">学科评语</span><span class="tag">教学反思</span></div></div>' +
-    '<div class="hc-act"><button class="btn btn-sm btn-light" data-act="go" data-page="timetable">看课表</button><button class="btn btn-sm btn-dark" data-act="go" data-page="ai">打开 AI 助手</button></div>';
+    '<div class="hc-act"><button class="btn btn-sm btn-dark" data-act="go" data-page="ai">打开 AI 助手</button></div>';
 }
 function scheduleCard(el) {
   clearTimeout(Cls.cardT); clearTimeout(Cls.hideT);
@@ -4412,7 +4410,7 @@ function renderDock() {
     var pr = progOf(c.id);
     if (pr.n) sub = '<div class="subbar"><span class="muted">本节</span><b>' + esc(pr.cur ? pr.cur.name : '课题已全部完成') + '</b>' + (pr.next ? '<span class="muted">下节：' + esc(pr.next.name) + '</span>' : '') +
       (pr.cur ? '<button class="btn btn-sm btn-light" data-act="pg-done-cur">' + ICON.check + '这个课题讲完了</button>' : '') + '</div>';
-    else sub = '<div class="subbar"><span class="muted">设置好课题后，这里会显示本节讲什么</span><button class="btn btn-sm btn-light" data-act="go" data-page="progress">设置教学进度</button></div>';
+    else sub = '<div class="subbar"><span class="muted">还没有设置课题</span></div>';
   } else if (Cls.mode === 'points') {
     sub = ptSubbar(c);
   } else if (Cls.mode === 'seat') {
@@ -4584,7 +4582,7 @@ function lessonRow(e, curId) {
   var col = c ? clsColor(c) : '#c9c9c6';
   var label = e.cancelled ? '<s>' + esc(slotTitle(e.base)) + '</s>' : esc(slotTitle(sl));
   var tag = e.cancelled ? '<span class="tag gray">' + esc((e.off || e.change || {}).note || '停课') + '</span>' : stt === 'now' ? '<span class="tag green">上课中</span>' : e.changed ? '<span class="tag amber">调课</span>' : (sl && sl.kind !== '正课' ? '<span class="tag gray">' + esc(sl.kind) + '</span>' : '');
-  return '<button class="lsn ' + (stt === 'past' ? 'past ' : '') + (stt === 'now' ? 'now ' : '') + (c && c.id === curId ? 'cur-cls' : '') + '"' + (c ? ' data-act="cls-switch" data-cid="' + c.id + '"' : ' data-act="go" data-page="timetable"') + '>' +
+  return '<button class="lsn ' + (stt === 'past' ? 'past ' : '') + (stt === 'now' ? 'now ' : '') + (c && c.id === curId ? 'cur-cls' : '') + '"' + (c ? ' data-act="cls-switch" data-cid="' + c.id + '"' : '') + '>' +
     '<span class="tm"><b>' + esc(e.p.name) + '</b>' + esc(e.p.start) + '</span><i class="bar" style="background:' + col + '"></i><span class="grow nm">' + label + (sl && sl.room ? '<br><span class="muted" style="font-size:11.5px">' + esc(sl.room) + '</span>' : '') + '</span>' + tag + '</button>';
 }
 Cls.renderRail = function (el) {
@@ -4599,7 +4597,7 @@ Cls.renderRail = function (el) {
   // 课程
   var listDay = todayStr(), list = todayL, title = '今日课程';
   if (!todayL.length) { var nd = nextSchoolDay(); if (nd) { listDay = nd; list = lessonsOn(nd); title = dayLabel(nd) + '的课'; } }
-  h += '<div class="rail-sec"><div class="rail-k">' + title + '<button data-act="go" data-page="timetable">课表</button></div>';
+  h += '<div class="rail-sec"><div class="rail-k">' + title + '</div>';
   if (!todayL.length && listDay === todayStr()) h += '<div class="muted" style="font-size:12.5px;margin-top:4px">接下来两周课表里没有课</div>';
   else {
     if (!todayL.length) h += '<div class="muted" style="font-size:12px;margin:2px 0 4px">今天没有课</div>';
@@ -4611,7 +4609,7 @@ Cls.renderRail = function (el) {
     // 进度
     if (S.units.length) {
       var pr = progOf(c.id), pc = paceOf(c.id);
-      h += '<div class="rail-sec"><div class="rail-k">教学进度<button data-act="go" data-page="progress">查看</button></div>' +
+      h += '<div class="rail-sec"><div class="rail-k">教学进度</div>' +
         '<div style="display:flex;align-items:baseline;gap:8px"><div class="rail-big">' + pr.done + '<small>/ ' + pr.n + ' 课题</small></div>' + (pc.diff !== null ? '<span class="tag ' + pc.tone + '">' + pc.t + '</span>' : '') + '</div>' +
         '<div class="muted" style="font-size:12px;margin-bottom:8px">当前：' + esc(pr.cur ? pr.cur.name : '已全部完成') + '</div>' +
         S.classes.map(function (k) { var p = progOf(k.id); return '<div style="display:flex;align-items:center;gap:8px;font-size:12px;margin:5px 0' + (k.id === c.id ? ';font-weight:600' : ';color:var(--ink2)') + '"><span style="width:76px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + esc(k.name) + '</span><span class="mini-bar"><i style="width:' + (p.total ? Math.round(p.hrs / p.total * 100) : 0) + '%;background:' + clsColor(k) + '"></i></span><span class="num" style="width:34px;text-align:right">' + p.done + '/' + p.n + '</span></div>'; }).join('') + '</div>';
@@ -4796,7 +4794,6 @@ function hrScreen(c) {
   return { kind: 'hr-day|' + sig, screenTop: c.name + ' · ' + (d.getMonth() + 1) + '月' + d.getDate() + '日 星期' + WEEK[d.getDay()], countLabel: st.countdown.label || '考试', days: cd, unit: '天',
     screenBottom: nxt ? '下一节 ' + nxt.p.name + ' ' + nxt.sub + ' · ' + nxt.p.start : (cd === null ? (st.school || '') : (cdd.getFullYear() + '年' + (cdd.getMonth() + 1) + '月' + cdd.getDate() + '日')) };
 }
-UI.act['ctt-open'] = function () { TT.view = 'class'; UI.go('timetable'); };
 
 
 /* ---------- 考勤模式 ---------- */
@@ -4903,225 +4900,8 @@ function slotHTML(e, ds) {
   var now = ds === todayStr() && lessonState(e) === 'now';
   return '<div class="slot' + (c ? '' : ' muted-slot') + (now ? ' now' : '') + '" style="border-left-color:' + col + ';background:' + (c ? col + '14' : '') + '"><b>' + esc(slotTitle(sl)) + '</b>' + (sub ? '<span>' + esc(sub) + '</span>' : '') + (e.changed ? '<i class="flag">' + (e.base ? '调' : '加') + '</i>' : '') + '</div>';
 }
-UI.register('timetable', {
-  render: function (main) {
-    if (TT.week === null) TT.week = isWeekend() ? 1 : 0;
-    if (TT.view === 'class' && hrCls()) { syncPeriods(); cttRender(main); return; }
-    var st = S.settings, dates = weekDates(TT.week), t = todayStr();
-    var showDays = st.days;
-    for (var k = st.days; k < 7; k++) if (activeOn(dates[k]).length) showDays = k + 1;
-    var h = '<div class="page scroll"><div class="page-head"><div><h1 class="page-title">课表</h1><div class="page-desc">' + weekTitle(TT.week) + '</div></div>' +
-      '<div class="seg light" style="margin-left:6px"><button data-act="tt-week" data-d="-1" aria-label="上一周">' + ICON.back + '</button><button data-act="tt-week" data-d="0" class="' + (TT.week === (isWeekend() ? 1 : 0) ? 'on' : '') + '">' + (isWeekend() ? '下周' : '本周') + '</button><button data-act="tt-week" data-d="1" aria-label="下一周">' + ICON.fwd + '</button></div>' + ttViewSeg() +
-      '<div class="grow"></div><label class="muted" style="font-size:12.5px;margin-right:6px">作息</label><select class="sel" style="height:32px;width:auto;margin-right:8px" data-chg="tt-tpl" aria-label="选择作息模板">' + periodTpls().map(function (t) { return '<option value="' + t.id + '"' + (t.id === S.settings.tplId ? ' selected' : '') + '>' + esc(t.name) + '</option>'; }).join('') + '</select><button class="btn btn-light" data-act="go" data-page="settings" data-sec="periods">' + ICON.timer + '管理作息</button>' +
-      '<button class="btn btn-light" data-act="tt-print">' + ICON.print + '打印课表</button><button class="btn btn-dark" data-act="tt-ics" title="导出 .ics 文件，导入手机或电脑日历，每节课前提醒">' + ICON.cal + '导出到日历</button></div>';
-    if (!S.classes.length) h += '<div class="paste-hint">' + ICON.room + '<span>还没有添加任教班级。先到 <a href="#" data-act="go" data-page="settings" data-sec="classes">设置 → 我教的班级</a> 添加，再回来排课。</span></div>';
-    else if (!Object.keys(S.tt).length) h += '<div class="paste-hint">' + ICON.cal + '<span>点任意格子排课：选班级、选「每周都这样」就是固定课表；以后临时调课，选「只改这一次」。</span></div>';
-    h += '<div class="tt-layout"><div class="tt-wrap"><table class="tt"><thead><tr><th class="p-col"></th>';
-    for (var i = 0; i < showDays; i++) {
-      var ds = dates[i], off = S.changes.filter(function (c) { return c.date === ds && c.pid === '*'; })[0];
-      h += '<th class="' + (ds === t ? 'today' : '') + '" data-act="tt-day" data-date="' + ds + '" title="设置这天停课或放假">周' + WEEK[(i + 1) % 7] + '<small>' + fmtShort(ds) + (off ? ' · ' + esc(off.note || '停课') : '') + '</small></th>';
-    }
-    h += '</tr></thead><tbody>';
-    st.periods.forEach(function (p) {
-      h += '<tr><th>' + esc(p.name) + '<small>' + esc(p.start) + '–' + esc(p.end) + '</small></th>';
-      for (var j = 0; j < showDays; j++) {
-        var dd = dates[j], es = lessonsOn(dd), e = null;
-        es.forEach(function (x) { if (x.pid === p.id) e = x; });
-        var off2 = es.length && es[0].off;
-        h += '<td class="' + (dd === t ? 'today ' : '') + (off2 || S.changes.some(function (c) { return c.date === dd && c.pid === '*'; }) ? 'off' : '') + '" data-act="tt-cell" data-date="' + dd + '" data-pid="' + p.id + '">' + slotHTML(e, dd) + '</td>';
-      }
-      h += '</tr>';
-    });
-    h += '</tbody></table></div>';
-    // 右侧：课时统计 + 调课记录
-    h += '<div><div class="panel" style="margin-bottom:16px"><div class="panel-title">课时统计</div><div class="panel-sub">每周固定 / 这一周实际</div>';
-    if (S.classes.length) {
-      var wkAct = {}; dates.forEach(function (ds) { activeOn(ds).forEach(function (e) { if (e.slot.cid && e.slot.kind === '正课') wkAct[e.slot.cid] = (wkAct[e.slot.cid] || 0) + 1; }); });
-      var tot1 = 0, tot2 = 0;
-      h += '<table class="tbl"><tbody>' + S.classes.map(function (c) {
-        var a = weeklyCount(c.id, '正课'), b = wkAct[c.id] || 0, other = weeklyCount(c.id) - a; tot1 += a; tot2 += b;
-        return '<tr><td><span style="display:inline-flex;align-items:center;gap:7px"><i class="cdot" style="background:' + clsColor(c) + '"></i>' + esc(c.name) + '</span></td><td class="r num">' + a + ' 节' + (other ? '<span class="muted" style="font-size:11.5px"> +' + other + '</span>' : '') + '</td><td class="r num ' + (b < a ? 'dn' : b > a ? 'up' : '') + '">' + b + '</td></tr>';
-      }).join('') + '<tr><td class="muted">合计正课</td><td class="r num"><b>' + tot1 + '</b></td><td class="r num"><b>' + tot2 + '</b></td></tr></tbody></table>';
-      var other2 = 0; Object.keys(S.tt).forEach(function (k) { var sl = S.tt[k]; if (sl && !sl.cid && +k.split('|')[0] <= st.days) other2++; });
-      if (other2) h += '<div class="muted" style="font-size:12px;margin-top:8px">另有教研、值班等事务 ' + other2 + ' 项 / 周</div>';
-    } else h += '<div class="muted" style="font-size:12.5px">还没有班级</div>';
-    h += '</div>';
-    var chg = S.changes.slice().sort(function (a, b) { return a.date < b.date ? 1 : a.date > b.date ? -1 : 0; });
-    h += '<div class="panel"><div class="panel-title">调课与停课记录</div><div class="panel-sub">只影响当天，每周固定课表不变</div>';
-    if (!chg.length) h += '<div class="muted" style="font-size:12.5px">还没有。点课表格子，选「只改这一次」即可调课、代课或停课。</div>';
-    else h += '<div class="chg-list">' + chg.slice(0, TT.allChg ? 200 : 10).map(function (c) {
-      var p = c.pid === '*' ? null : periodById(c.pid), cl = c.cid ? clsById(c.cid) : null;
-      var what = c.pid === '*' ? '全天停课' : c.act === 'cancel' ? '停课' : (cl ? cl.name : (c.kind || '事务'));
-      var past = c.date < todayStr();
-      return '<div class="chg' + (past ? ' past' : '') + '"><div class="d"><b>' + fmtMD(c.date) + '</b><span>周' + WEEK[parseDate(c.date).getDay()] + (p ? ' · ' + esc(p.name) : '') + '</span></div><div class="grow"><span class="tag ' + (c.act === 'cancel' ? 'gray' : 'amber') + '">' + esc(what) + '</span>' + (c.note ? ' <span class="muted" style="font-size:12px">' + esc(c.note) + '</span>' : '') + '</div><button class="x" data-act="chg-del" data-id="' + c.id + '" title="撤销这条调整" aria-label="撤销">×</button></div>';
-    }).join('') + '</div>' + (chg.length > 10 && !TT.allChg ? '<button class="btn btn-xs btn-ghost" data-act="chg-all" style="margin-top:6px">显示全部 ' + chg.length + ' 条</button>' : '');
-    h += '</div></div></div></div>';
-    main.innerHTML = h;
-  }
-});
-UI.act['tt-week'] = function (el) { var d = +el.getAttribute('data-d'); TT.week = d === 0 ? (isWeekend() ? 1 : 0) : TT.week + d; UI.rerender(); };
-UI.act['chg-all'] = function () { TT.allChg = true; UI.rerender(); };
-UI.act['chg-del'] = function (el) { S.changes = S.changes.filter(function (c) { return c.id !== el.getAttribute('data-id'); }); save(); UI.rerender(); UI.toast('已撤销'); };
-
-/* ---------- 某一天停课 / 放假 ---------- */
-UI.act['tt-day'] = function (el) {
-  var ds = el.getAttribute('data-date'), off = S.changes.filter(function (c) { return c.date === ds && c.pid === '*'; })[0];
-  var d = parseDate(ds), lbl = fmtMD(ds) + ' 周' + WEEK[d.getDay()];
-  if (off) {
-    UI.confirm('恢复上课', lbl + ' 目前标记为「' + esc(off.note || '停课') + '」。恢复后这天按课表正常上课。', '恢复上课', function () { S.changes = S.changes.filter(function (c) { return c !== off; }); save(); UI.rerender(); });
-    return;
-  }
-  UI.modal({
-    title: lbl + ' 全天停课', body: '<p style="margin:0 0 12px;color:var(--ink2);font-size:13px;line-height:1.7">比如放假、运动会、考试。这天的课会显示为停课，不计入已上课时。</p>' +
-      '<div class="field"><label>原因</label><input class="inp" id="dayNote" placeholder="如：秋季运动会" autofocus></div><div class="chips">' + ['放假', '运动会', '考试', '研学', '其他活动'].map(function (x) { return '<button type="button" data-act="day-note" data-t="' + x + '">' + x + '</button>'; }).join('') + '</div>',
-    foot: '<button class="btn btn-light" data-act="modal-close">取消</button><button class="btn btn-dark" data-act="day-off-ok" data-date="' + ds + '">设为停课</button>'
-  });
-};
-UI.act['day-note'] = function (el) { $('#dayNote').value = el.getAttribute('data-t'); };
-UI.act['day-off-ok'] = function (el) {
-  S.changes.push({ id: uid('chg'), date: el.getAttribute('data-date'), pid: '*', act: 'cancel', note: $('#dayNote').value.trim() || '停课' });
-  save(); UI.closeModal(); UI.rerender();
-};
-
-/* ---------- 编辑一个格子 ---------- */
-UI.act['tt-cell'] = function (el) {
-  var ds = el.getAttribute('data-date'), pid = el.getAttribute('data-pid'), p = periodById(pid);
-  var d = parseDate(ds), w = dow7(d), key = w + '|' + pid;
-  var e = null; lessonsOn(ds).forEach(function (x) { if (x.pid === pid) e = x; });
-  var base = w <= S.settings.days ? S.tt[key] || null : null, once = S.changes.filter(function (c) { return c.date === ds && c.pid === pid; })[0] || null;
-  var shown = e ? (e.slot || null) : base;
-  var who = shown ? (shown.cid || '_') : '';
-  TT.cell = { ds: ds, pid: pid, key: key, base: base, once: once, who: who, kind: shown ? shown.kind : '正课', scope: once || w > S.settings.days ? 'once' : 'week', move: false };
-  var body = '<div class="field"><label>安排</label><div class="chips" id="ttWho"><button type="button" data-act="tt-who" data-v="" class="' + (who === '' ? 'on' : '') + '">空</button>' +
-    S.classes.map(function (c) { return '<button type="button" data-act="tt-who" data-v="' + c.id + '" class="' + (who === c.id ? 'on' : '') + '"><i class="cdot" style="background:' + clsColor(c) + ';margin-right:5px;vertical-align:0"></i>' + esc(c.name) + '</button>'; }).join('') +
-    '<button type="button" data-act="tt-who" data-v="_" class="' + (who === '_' ? 'on' : '') + '">教研 / 值班等事务</button></div></div>' +
-    '<div id="ttDetail" class="' + (who === '' ? 'hide' : '') + '"><div class="field"><label>类型</label><div class="chips" id="ttKind">' + SLOT_KINDS.map(function (k) { return '<button type="button" data-act="tt-kind" data-v="' + k + '" class="' + (TT.cell.kind === k ? 'on' : '') + '">' + k + '</button>'; }).join('') + '</div></div>' +
-    '<div class="row2"><div class="field"><label>教室 / 地点</label><input class="inp" id="ttRoom" value="' + esc(shown ? shown.room || '' : '') + '" placeholder="选填，如：博学楼 203"></div><div class="field"><label>备注</label><input class="inp" id="ttNote" value="' + esc(shown ? shown.note || '' : '') + '" placeholder="选填，如：代王老师上课"></div></div></div>' +
-    '<div class="field"><label>适用范围</label><div class="seg light" id="ttScope"><button type="button" data-act="tt-scope" data-v="week" class="' + (TT.cell.scope === 'week' ? 'on' : '') + '"' + (w > S.settings.days ? ' disabled' : '') + '>每周都这样（固定课表）</button><button type="button" data-act="tt-scope" data-v="once" class="' + (TT.cell.scope === 'once' ? 'on' : '') + '">只改 ' + fmtMD(ds) + ' 这一次</button></div>' +
-    (once ? '<div class="hint">这一格在 ' + fmtMD(ds) + ' 有临时调整' + (once.note ? '（' + esc(once.note) + '）' : '') + '，每周固定是：' + (base ? esc(slotTitle(base)) : '空') + '</div>' : '') + '</div>' +
-    (e && e.slot ? '<div class="hr"></div><button type="button" class="btn btn-sm btn-light" data-act="tt-move-open">' + ICON.shuffle + '把这节课调到别的时间…</button><div id="ttMove" class="hide" style="margin-top:12px"><div class="row2"><div class="field"><label>调到哪天</label><input class="inp" type="date" id="mvDate" value="' + ds + '" data-chg="mv-check"></div><div class="field"><label>第几节</label><select class="sel" id="mvPid" data-chg="mv-check">' + S.settings.periods.map(function (q) { return '<option value="' + q.id + '"' + (q.id === pid ? ' selected' : '') + '>' + esc(q.name) + ' ' + q.start + '</option>'; }).join('') + '</select></div></div><div id="mvInfo" class="muted" style="font-size:12.5px"></div></div>' : '');
-  UI.modal({
-    title: '周' + WEEK[d.getDay()] + ' ' + esc(p.name) + ' <span class="muted" style="font-weight:400;font-size:13px;margin-left:6px">' + fmtMD(ds) + ' · ' + p.start + '–' + p.end + '</span>', body: body, wide: true, noFocus: true,
-    foot: '<button class="btn btn-light" data-act="modal-close">取消</button><button class="btn btn-dark" data-act="tt-save">保存</button>'
-  });
-};
-UI.act['tt-who'] = function (el) {
-  TT.cell.who = el.getAttribute('data-v');
-  $$('#ttWho button').forEach(function (b) { b.classList.toggle('on', b === el); });
-  $('#ttDetail').classList.toggle('hide', TT.cell.who === '');
-  if (TT.cell.who === '_' && CLASS_KINDS.indexOf(TT.cell.kind) >= 0) UI.act['tt-kind']($('#ttKind [data-v="教研"]'));
-  if (TT.cell.who && TT.cell.who !== '_' && CLASS_KINDS.indexOf(TT.cell.kind) < 0) UI.act['tt-kind']($('#ttKind [data-v="正课"]'));
-  var c = clsById(TT.cell.who), r = $('#ttRoom'); if (c && c.room && r && !r.value) r.value = c.room;
-};
-UI.act['tt-kind'] = function (el) { if (!el) return; TT.cell.kind = el.getAttribute('data-v'); $$('#ttKind button').forEach(function (b) { b.classList.toggle('on', b === el); }); };
-UI.act['tt-scope'] = function (el) { TT.cell.scope = el.getAttribute('data-v'); $$('#ttScope button').forEach(function (b) { b.classList.toggle('on', b === el); }); };
-UI.act['tt-move-open'] = function () { TT.cell.move = !TT.cell.move; $('#ttMove').classList.toggle('hide', !TT.cell.move); UI.chg['mv-check'](); };
-UI.chg['mv-check'] = function () {
-  var ds = $('#mvDate').value, pid = $('#mvPid').value, info = $('#mvInfo'); if (!info) return;
-  if (!ds) { info.textContent = '请选择日期'; return; }
-  if (ds === TT.cell.ds && pid === TT.cell.pid) { info.textContent = '选一个不同的时间'; return; }
-  var t = null; lessonsOn(ds).forEach(function (x) { if (x.pid === pid && x.slot) t = x; });
-  info.innerHTML = t ? '那个时间原本是「' + esc(slotTitle(t.slot)) + '」。<label class="chk" style="margin-top:6px"><input type="checkbox" id="mvSwap" checked> 两节课对调（把「' + esc(slotTitle(t.slot)) + '」换到这里）</label>' : '那个时间是空的，会把这节课挪过去。';
-};
-function slotFromForm() {
-  var w = TT.cell.who; if (!w) return null;
-  return { cid: w === '_' ? '' : w, kind: TT.cell.kind || '正课', room: ($('#ttRoom').value || '').trim(), note: ($('#ttNote').value || '').trim() };
-}
-function sameSlot(a, b) { if (!a || !b) return !a && !b; return a.cid === b.cid && a.kind === b.kind && (a.room || '') === (b.room || '') && (a.note || '') === (b.note || ''); }
-function setOnce(ds, pid, slot, note) {
-  S.changes = S.changes.filter(function (c) { return !(c.date === ds && c.pid === pid); });
-  var d = parseDate(ds), w = dow7(d), base = w <= S.settings.days ? S.tt[w + '|' + pid] || null : null;
-  if (sameSlot(slot, base)) return;
-  if (!slot) { if (base) S.changes.push({ id: uid('chg'), date: ds, pid: pid, act: 'cancel', note: note || '' }); return; }
-  S.changes.push({ id: uid('chg'), date: ds, pid: pid, act: 'set', cid: slot.cid, kind: slot.kind, room: slot.room, note: slot.note || note || '' });
-}
-UI.act['tt-save'] = function () {
-  var cl = TT.cell, slot = slotFromForm();
-  if (cl.move && $('#mvDate')) {
-    var ds2 = $('#mvDate').value, pid2 = $('#mvPid').value;
-    if (!ds2 || (ds2 === cl.ds && pid2 === cl.pid)) { UI.toast('请选择一个不同的时间'); return; }
-    var src = null; lessonsOn(cl.ds).forEach(function (x) { if (x.pid === cl.pid) src = x; });
-    var tgt = null; lessonsOn(ds2).forEach(function (x) { if (x.pid === pid2 && x.slot) tgt = x; });
-    var swap = $('#mvSwap') && $('#mvSwap').checked && tgt;
-    var mv = deepClone(slot || src.slot), p1 = periodById(cl.pid), p2 = periodById(pid2);
-    mv.note = '由 ' + fmtMD(cl.ds) + ' ' + p1.name + ' 调来';
-    setOnce(ds2, pid2, mv);
-    if (swap) { var back = deepClone(tgt.slot); back.note = '由 ' + fmtMD(ds2) + ' ' + p2.name + ' 调来'; setOnce(cl.ds, cl.pid, back); }
-    else setOnce(cl.ds, cl.pid, null, '调到 ' + fmtMD(ds2) + ' ' + p2.name);
-    save(); UI.closeModal(); UI.rerender(); UI.toast(swap ? '已对调两节课' : '已调到 ' + fmtMD(ds2) + ' ' + p2.name);
-    return;
-  }
-  if (cl.scope === 'week') {
-    if (slot) S.tt[cl.key] = slot; else delete S.tt[cl.key];
-    S.changes = S.changes.filter(function (c) { return !(c.date === cl.ds && c.pid === cl.pid); });
-    UI.toast(slot ? '已写入每周固定课表' : '已从固定课表移除');
-  } else { setOnce(cl.ds, cl.pid, slot); UI.toast('已调整 ' + fmtMD(cl.ds) + ' 这一次'); }
-  save(); UI.closeModal(); UI.rerender();
-};
-
-/* ---------- 打印 ---------- */
-UI.act['tt-print'] = function () {
-  var st = S.settings, t = st.teacher, h = '';
-  h += '<!doctype html><html><head><meta charset="utf-8"><title>' + esc(t.name) + ' 课表</title><style>body{font-family:"PingFang SC","Microsoft YaHei",sans-serif;padding:24px;color:#171717}h1{font-size:20px;text-align:center;margin:0 0 4px}p{text-align:center;color:#777;margin:0 0 16px;font-size:12px}table{border-collapse:collapse;width:100%}th,td{border:1px solid #cfcfcc;padding:8px 6px;text-align:center;font-size:13px;height:42px}th{background:#f5f5f4}td small,th small{display:block;color:#888;font-size:11px;font-weight:400}@media print{body{padding:0}}</style></head><body>';
-  h += '<h1>' + esc(t.name) + ' · ' + esc(t.subject || '') + ' 课表</h1><p>' + esc(st.school || '') + ' ' + esc(st.term || '') + ' · 打印于 ' + todayStr() + '</p><table><tr><th>节次</th>';
-  for (var i = 1; i <= st.days; i++) h += '<th>周' + WEEK[i % 7] + '</th>';
-  h += '</tr>';
-  st.periods.forEach(function (p) {
-    h += '<tr><th>' + esc(p.name) + '<small>' + p.start + '–' + p.end + '</small></th>';
-    for (var d = 1; d <= st.days; d++) { var sl = S.tt[d + '|' + p.id]; h += '<td>' + (sl ? esc(slotTitle(sl)) + '<small>' + esc([sl.kind !== '正课' ? sl.kind : '', sl.room].filter(Boolean).join(' · ')) + '</small>' : '') + '</td>'; }
-    h += '</tr>';
-  });
-  h += '</table><script>setTimeout(function(){window.print()},300)<\/script></body></html>';
-  var w = window.open('', '_blank');
-  if (!w) { UI.toast('浏览器拦截了新窗口，请允许弹出窗口'); return; }
-  w.document.write(h); w.document.close();
-};
-
-/* ---------- 导出 .ics（导入手机或电脑日历，每节课前 10 分钟提醒） ---------- */
-function icsEsc(s) { return String(s || '').replace(/\\/g, '\\\\').replace(/;/g, '\\;').replace(/,/g, '\\,').replace(/\n/g, '\\n'); }
-function icsDT(ds, hm) { return ds.replace(/-/g, '') + 'T' + hm.replace(':', '') + '00'; }
-UI.act['tt-ics'] = function () {
-  var st = S.settings, end = st.termEnd || st.countdown.date, from = todayStr() > st.termStart ? todayStr() : st.termStart;
-  if (!parseDate(end) || end < from) { UI.toast('请先到 设置 → 个人信息 填写学期结束日期'); return; }
-  var L = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//cyberdad//rk-workbench//CN', 'CALSCALE:GREGORIAN', 'METHOD:PUBLISH', 'X-WR-CALNAME:' + icsEsc((st.teacher.subject || '') + '课表'), 'X-WR-TIMEZONE:Asia/Shanghai',
-    'BEGIN:VTIMEZONE', 'TZID:Asia/Shanghai', 'BEGIN:STANDARD', 'DTSTART:19700101T000000', 'TZOFFSETFROM:+0800', 'TZOFFSETTO:+0800', 'TZNAME:CST', 'END:STANDARD', 'END:VTIMEZONE'];
-  var stamp = new Date().toISOString().replace(/[-:]/g, '').replace(/\.\d+/, ''), n = 0;
-  function ev(ds, p, sl, rrule, ex, uidk) {
-    L.push('BEGIN:VEVENT', 'UID:' + uidk + '-' + Date.now().toString(36) + '@rk-workbench', 'DTSTAMP:' + stamp,
-      'DTSTART;TZID=Asia/Shanghai:' + icsDT(ds, p.start), 'DTEND;TZID=Asia/Shanghai:' + icsDT(ds, p.end), 'SUMMARY:' + icsEsc(slotTitle(sl) + (sl.cid ? ' ' + (st.teacher.subject || '') : '') + (sl.kind !== '正课' && sl.cid ? '（' + sl.kind + '）' : '')));
-    if (sl.room) L.push('LOCATION:' + icsEsc(sl.room));
-    if (sl.note) L.push('DESCRIPTION:' + icsEsc(sl.note));
-    if (rrule) L.push(rrule);
-    if (ex && ex.length) L.push('EXDATE;TZID=Asia/Shanghai:' + ex.join(','));
-    L.push('BEGIN:VALARM', 'ACTION:DISPLAY', 'DESCRIPTION:' + icsEsc(slotTitle(sl)), 'TRIGGER:-PT10M', 'END:VALARM', 'END:VEVENT');
-    n++;
-  }
-  Object.keys(S.tt).forEach(function (k) {
-    var w = +k.split('|')[0], p = periodById(k.split('|')[1]), sl = S.tt[k];
-    if (!p || !sl || w > st.days) return;
-    var ds = from; while (dow7(parseDate(ds)) !== w) ds = addDays(ds, 1);
-    if (ds > end) return;
-    var ex = [];
-    S.changes.forEach(function (c) { if (c.date >= ds && c.date <= end && dow7(parseDate(c.date)) === w && (c.pid === '*' || c.pid === p.id)) ex.push(icsDT(c.date, p.start)); });
-    ev(ds, p, sl, 'RRULE:FREQ=WEEKLY;UNTIL=' + end.replace(/-/g, '') + 'T155959Z', ex, 'w' + k.replace('|', '-'));
-  });
-  S.changes.forEach(function (c) {
-    if (c.act !== 'set' || c.date < from) return;
-    var p = periodById(c.pid); if (!p) return;
-    if (S.changes.some(function (x) { return x.date === c.date && x.pid === '*'; })) return;
-    ev(c.date, p, { cid: c.cid, kind: c.kind || '正课', room: c.room, note: c.note }, null, null, 'c' + c.id);
-  });
-  L.push('END:VCALENDAR');
-  if (!n) { UI.toast('课表还是空的，先排好课再导出'); return; }
-  downloadFile((st.teacher.name || '我') + '的课表.ics', L.join('\r\n'), 'text/calendar;charset=utf-8');
-  UI.modal({
-    title: '课表已导出', body: '<p style="margin:0;color:var(--ink2);line-height:1.8;font-size:13.5px">已生成 ' + n + ' 组日程（每周重复，直到 ' + fmtMD(end) + '），每节课前 10 分钟提醒，调课和停课也已经算进去。<br><b style="color:var(--ink)">苹果手机</b>：把文件发到微信「文件传输助手」或邮箱，在手机上打开，选「添加全部」。<br><b style="color:var(--ink)">安卓手机 / 电脑</b>：用系统日历、Outlook 或 Google 日历「导入」这个文件。<br>以后课表改了，删掉旧日历再导入一次即可。</p>',
-    foot: '<button class="btn btn-dark" data-act="modal-close">知道了</button>'
-  });
-};
-
 /* =========================================================
-   课表 · 班级课表（班主任班）：每周固定的全部科目，按日期显示上课进度；
+   课表 · 班级课表：每周固定的全部科目，按日期显示上课进度；
    我自己在这个班的课从「我的课表」自动带入；支持从 Excel / WPS 整表粘贴、打印
    ========================================================= */
 var SUB_COLORS = { '语文': '#e4573d', '数学': '#2f7be5', '英语': '#7a5af5', '物理': '#0f9b8e', '化学': '#1597c4', '生物': '#3b9e4f', '科学': '#3b9e4f', '道法': '#cf4a6b', '政治': '#cf4a6b', '历史': '#b67a1c', '地理': '#2e9469', '体育': '#ee8a12', '音乐': '#d4569c', '美术': '#c2569c', '信息': '#5a55d8', '班会': '#e5483b', '自习': '#8b9099', '劳动': '#8a6d3b', '心理': '#13a6a0', '阅读': '#b67a1c' };
@@ -5326,88 +5106,6 @@ UI.act['ctt-print'] = function () {
   if (!w) { UI.toast('浏览器拦截了新窗口，请允许弹出窗口'); return; }
   w.document.write(h); w.document.close();
 };
-
-/* =========================================================
-   教学进度 · 课题清单、各班完成情况、按已上课时推算快慢
-   ========================================================= */
-UI.register('progress', {
-  render: function (main) {
-    var total = sum(S.units.map(function (u) { return +u.hours || 0; }));
-    var h = '<div class="page scroll"><div class="page-head"><div><h1 class="page-title">教学进度</h1><div class="page-desc">' + (S.units.length ? S.units.length + ' 个课题 · 共 ' + total + ' 课时' + (weekNo() ? ' · 第 ' + weekNo() + ' 周' : '') : '列出本学期要讲的课题，就能看各班进度和快慢') + '</div></div><div class="grow"></div>' +
-      (S.units.length ? '<button class="btn btn-light" data-act="pg-export">' + ICON.down + '导出</button>' : '') + '<button class="btn btn-dark" data-act="pg-edit">' + ICON.edit + '编辑课题</button></div>';
-    if (!S.units.length) {
-      main.innerHTML = h + '<div class="panel"><div class="empty">' + ART.teacherAvatar(S.settings.teacher, 72, false) + '还没有课题。把本学期的章节、课题和计划课时贴进来（可以直接从教学计划里复制），每个班讲完一个就点一下。<div style="margin-top:14px"><button class="btn btn-dark" data-act="pg-edit">' + ICON.plus + '添加课题</button></div></div></div></div>';
-      return;
-    }
-    if (!S.classes.length) { main.innerHTML = h + '<div class="panel"><div class="empty">先到设置里添加任教班级</div></div></div>'; return; }
-    h += '<div class="pg-cards">' + S.classes.map(function (c) {
-      var pr = progOf(c.id), pc = paceOf(c.id);
-      return '<div class="pg-card"><div class="h"><i class="cdot" style="background:' + clsColor(c) + '"></i>' + esc(c.name) + (pc.diff !== null ? '<span class="tag ' + pc.tone + '" style="margin-left:auto">' + pc.t + '</span>' : '') + '</div>' +
-        '<div class="big">' + pr.done + '<small class="muted" style="font-size:13px;font-weight:500"> / ' + pr.n + ' 个课题</small></div>' +
-        '<div class="prog"><i style="width:' + (pr.total ? Math.round(pr.hrs / pr.total * 100) : 0) + '%;background:' + clsColor(c) + '"></i></div>' +
-        '<div class="muted" style="font-size:12.5px;margin-top:8px">当前：<span style="color:var(--ink)">' + esc(pr.cur ? pr.cur.name : '已全部完成') + '</span></div>' +
-        '<div class="muted" style="font-size:12px;margin-top:2px">已上 ' + pc.held + ' 节正课' + (pc.held ? ' · 按计划课时应完成 ' + pc.exp + ' 个课题' : '') + '</div></div>';
-    }).join('') + '</div>';
-    h += '<div class="panel" style="padding:20px 0 6px"><div style="padding:0 20px"><div class="panel-title">课题清单</div><div class="panel-sub">点格子标记某个班讲完了（默认今天，可以再点一次改日期）。快慢的算法：按课表数出已经上过多少节正课，再按每个课题的计划课时推算「应该讲完几个课题」，和实际完成数比较，仅供参考。</div></div>' +
-      '<div style="overflow:auto"><table class="tbl pg-tbl"><thead><tr><th style="width:44px">#</th><th>课题</th><th class="r" style="width:60px">课时</th>' + S.classes.map(function (c) { return '<th class="c" style="min-width:120px"><span style="display:inline-flex;align-items:center;gap:6px"><i class="cdot" style="background:' + clsColor(c) + '"></i>' + esc(c.name) + '</span></th>'; }).join('') + '</tr></thead><tbody>';
-    var curs = {}; S.classes.forEach(function (c) { var pr = progOf(c.id); curs[c.id] = pr.cur ? pr.cur.id : null; });
-    var cum = 0;
-    S.units.forEach(function (u, i) {
-      cum += +u.hours || 0;
-      var rev = /复习|测验|考试|小结/.test(u.name);
-      h += '<tr><td class="num muted">' + (i + 1) + '</td><td' + (rev ? ' class="sub"' : '') + '><b style="font-weight:' + (rev ? 400 : 500) + '">' + esc(u.name) + '</b></td><td class="r num muted">' + u.hours + '</td>' +
-        S.classes.map(function (c) {
-          var d = (S.prog[c.id] || {})[u.id];
-          var cell = d ? '<span class="pg-done">' + ICON.check.replace('width="16" height="16"', 'width="12" height="12"') + fmtShort(d) + '</span>' : curs[c.id] === u.id ? '<span class="pg-cur">进行中</span>' : '<span class="pg-todo"></span>';
-          return '<td class="pc" data-act="pg-cell" data-u="' + u.id + '" data-c="' + c.id + '">' + cell + '</td>';
-        }).join('') + '</tr>';
-    });
-    h += '</tbody></table></div></div></div>';
-    main.innerHTML = h;
-  }
-});
-UI.act['pg-cell'] = function (el) {
-  var uidv = el.getAttribute('data-u'), cid = el.getAttribute('data-c'), c = clsById(cid), u = S.units.filter(function (x) { return x.id === uidv; })[0];
-  if (!S.prog[cid]) S.prog[cid] = {};
-  var d = S.prog[cid][uidv];
-  if (!d) { S.prog[cid][uidv] = todayStr(); save(); UI.rerender(); UI.toast(c.name + ' 完成「' + u.name + '」'); return; }
-  UI.modal({
-    title: esc(c.name) + ' · ' + esc(u.name), body: '<div class="field"><label>完成日期</label><input class="inp" type="date" id="pgDate" value="' + d + '"></div>',
-    foot: '<button class="btn btn-ghost" data-act="pg-undo" data-u="' + uidv + '" data-c="' + cid + '" style="margin-right:auto;color:var(--red)">标记为未完成</button><button class="btn btn-light" data-act="modal-close">取消</button><button class="btn btn-dark" data-act="pg-date-ok" data-u="' + uidv + '" data-c="' + cid + '">保存</button>'
-  });
-};
-UI.act['pg-undo'] = function (el) { delete S.prog[el.getAttribute('data-c')][el.getAttribute('data-u')]; save(); UI.closeModal(); UI.rerender(); };
-UI.act['pg-date-ok'] = function (el) { var v = $('#pgDate').value; if (!v) return; S.prog[el.getAttribute('data-c')][el.getAttribute('data-u')] = v; save(); UI.closeModal(); UI.rerender(); };
-UI.act['pg-edit'] = function () {
-  var txt = S.units.map(function (u) { return u.name + '\t' + u.hours; }).join('\n');
-  UI.modal({
-    title: '编辑课题', wide: true,
-    body: '<p style="margin:0 0 10px;color:var(--ink2);font-size:13px;line-height:1.7">每行一个课题，后面跟计划课时（空格或 Tab 隔开），没写课时按 1 节算。可以直接从教学计划表里复制两列粘贴进来。改名或删除课题后，对应的完成记录也会跟着变。</p>' +
-      '<textarea class="ta" id="pgText" style="min-height:320px;font-size:13px;line-height:1.75" placeholder="11.1 与三角形有关的线段	3&#10;11.2 与三角形有关的角	2&#10;第十一章 复习	1">' + esc(txt) + '</textarea><div class="muted" id="pgInfo" style="font-size:12.5px;margin-top:8px"></div>',
-    foot: '<button class="btn btn-light" data-act="modal-close">取消</button><button class="btn btn-dark" data-act="pg-save">保存</button>'
-  });
-};
-function parseUnits(t) {
-  return String(t || '').split(/\r?\n/).map(function (ln) { return ln.trim(); }).filter(Boolean).map(function (ln) {
-    var m = ln.match(/^(.*?)[\s,，|]+(\d+(?:\.\d+)?)\s*(课时|节)?$/);
-    return m && m[1].trim() ? { name: m[1].trim(), hours: +m[2] } : { name: ln, hours: 1 };
-  });
-}
-UI.act['pg-save'] = function () {
-  var list = parseUnits($('#pgText').value), old = {};
-  S.units.forEach(function (u) { old[u.name] = u.id; });
-  var used = {};
-  S.units = list.map(function (u) { var id = old[u.name] && !used[old[u.name]] ? old[u.name] : uid('u'); used[id] = 1; return { id: id, name: u.name.slice(0, 40), hours: clamp(u.hours, 0, 60) }; });
-  var keep = {}; S.units.forEach(function (u) { keep[u.id] = 1; });
-  Object.keys(S.prog).forEach(function (cid) { Object.keys(S.prog[cid]).forEach(function (k) { if (!keep[k]) delete S.prog[cid][k]; }); });
-  save(); UI.closeModal(); UI.rerender(); UI.toast('已保存 ' + S.units.length + ' 个课题');
-};
-UI.act['pg-export'] = function () {
-  var rows = [['序号', '课题', '计划课时'].concat(S.classes.map(function (c) { return c.name + ' 完成日期'; }))];
-  S.units.forEach(function (u, i) { rows.push([i + 1, u.name, u.hours].concat(S.classes.map(function (c) { return (S.prog[c.id] || {})[u.id] || ''; }))); });
-  downloadFile('教学进度-' + todayStr() + '.csv', toCSV(rows), 'text/csv;charset=utf-8');
-};
-
 
 /* =========================================================
    学生名单 · 只记上课需要的：姓名、学号、性别、标签、备注；详情看本学科成绩、课堂表现
@@ -5934,6 +5632,13 @@ function hrHeroHTML(st) {
 function recHTML(r, del) {
   return '<div class="tl-item t-' + esc(r.type) + '"><div class="tl-top"><span class="num">' + esc(r.date) + '</span><span class="tag gray">' + esc(r.type) + '</span>' + (del ? '<button class="del" data-act="rec-del" data-id="' + r.id + '" data-sid="' + r.sid + '">删除</button>' : '') + '</div><div class="tl-txt">' + esc(r.text) + '</div></div>';
 }
+/* 手填的级部名次（成绩录入页），没填过返回 null */
+function rankGR(ex, sid) {
+  var r = ex && ex.ranks && ex.ranks[sid], v = r && r.gr;
+  if (v === undefined || v === null || v === '') return null;
+  var num = +v;
+  return isNaN(num) ? null : num;
+}
 /* 返回 true 表示这个标签页由班主任档案画好了 */
 function hrDrawerTab(st, b) {
   var h = '', tab = Stu.tab, trend = hrTrend(st.id);
@@ -5941,13 +5646,14 @@ function hrDrawerTab(st, b) {
     var cur = null, prv = null;
     for (var i = trend.length - 1; i >= 0; i--) { if (trend[i].total !== null) { if (!cur) cur = trend[i]; else { prv = trend[i]; break; } } }
     var curCS = cur ? rankCS(cur.ex, st.id) : null, prvCS = prv ? rankCS(prv.ex, st.id) : null;
+    var curGR = cur ? rankGR(cur.ex, st.id) : null;
     var ch = cur && prv && curCS !== null && prvCS !== null ? prvCS - curCS : null, pts = pointsOf(st.id);
     var mk = todayStr().slice(0, 7), n = { leave: 0, absent: 0, late: 0 };
     Object.keys(S.attendance).forEach(function (k) { if (k.indexOf(mk) === 0) { var v = S.attendance[k][st.id]; if (v) n[v]++; } });
     var mine = stuTrend(st.id).filter(function (t) { return t.total !== null; }).pop();
     var mineCS = mine ? rankCS(mine.ex, st.id) : null;
-    h += '<div class="kpis" style="grid-template-columns:repeat(5,1fr)"><div class="kpi"><div class="k">' + (cur ? esc(shortExam(cur.ex.name)) + ' 总分' : '全科总分') + '</div><div class="v">' + (cur ? fmtNum(cur.total, 1) : '—') + '<small>' + (cur ? '/ ' + hrFull(cur.ex) : '') + '</small></div><div class="d">' + (cur ? (curCS !== null ? '班级第 ' + curCS + ' 名 ' : '班级名次未录入 ') + (ch ? '<span class="' + (ch > 0 ? 'up' : 'dn') + '">' + (ch > 0 ? '↑' + ch : '↓' + (-ch)) + '</span>' : '') : '<span class="muted">还没有全科成绩</span>') + '</div></div>' +
-      '<div class="kpi"><div class="k">' + esc(ownName()) + '</div><div class="v">' + (mine ? fmtNum(mine.total, 1) : '—') + '<small>' + (mine ? '/ ' + exFull(mine.ex) : '') + '</small></div><div class="d muted">' + (mine ? esc(shortExam(mine.ex.name)) + (mineCS !== null ? ' · 班内第 ' + mineCS + ' 名' : ' · 名次未录入') : '暂无成绩') + '</div></div>' +
+    h += '<div class="kpis" style="grid-template-columns:repeat(5,1fr)"><div class="kpi"><div class="k">' + (cur ? esc(shortExam(cur.ex.name)) + ' 总分' : '全科总分') + '</div><div class="v">' + (cur ? fmtNum(cur.total, 1) : '—') + '<small>' + (cur ? '/ ' + hrFull(cur.ex) : '') + '</small></div><div class="d">' + (cur ? ((curCS !== null ? '班级第 ' + curCS + ' 名' : '班级名次未录入') + ' · ' + (curGR !== null ? '级部第 ' + curGR + ' 名' : '级部名次未录入')) + (ch ? ' <span class="' + (ch > 0 ? 'up' : 'dn') + '">' + (ch > 0 ? '↑' + ch : '↓' + (-ch)) + '</span>' : '') : '<span class="muted">还没有全科成绩</span>') + '</div></div>' +
+      '<div class="kpi"><div class="k">' + esc(ownName()) + '</div><div class="v">' + (mine ? fmtNum(mine.total, 1) : '—') + '<small>' + (mine ? '/ ' + exFull(mine.ex) : '') + '</small></div><div class="d muted">' + (mine ? esc(shortExam(mine.ex.name)) : '暂无成绩') + '</div></div>' +
       '<div class="kpi"><div class="k">本月考勤</div><div class="v">' + (n.leave + n.absent + n.late === 0 ? '全勤' : (n.leave + n.absent) + '<small>天未到</small>') + '</div><div class="d muted">请假 ' + n.leave + ' · 缺勤 ' + n.absent + ' · 迟到 ' + n.late + '</div></div>' +
       '<div class="kpi"><div class="k">课堂积分</div><div class="v">' + (pts > 0 ? '+' : '') + pts + '</div><div class="d muted">' + S.points.filter(function (p) { return p.sid === st.id; }).length + ' 次点评</div></div>' +
       '<div class="kpi"><div class="k">生日</div><div class="v" style="font-size:19px">' + (st.birthday ? fmtMD(st.birthday) : '—') + '</div><div class="d muted">' + (daysToBirthday(st) === null ? '未填写' : daysToBirthday(st) === 0 ? '就是今天' : daysToBirthday(st) + ' 天后') + '</div></div></div>';
@@ -6002,11 +5708,14 @@ function hrDrawerTab(st, b) {
       h += '</tbody></table></div><div class="muted" style="font-size:12px;margin-top:8px">红色为不及格（低于满分的 ' + S.settings.thr.pass + '%）；只考' + esc(ownName()) + '的小测，名次按' + esc(ownName()) + '算</div>';
       if (trend.length > 1) {
         var csv = trend.map(function (t) { return rankCS(t.ex, st.id); });
-        var hasCS = csv.some(function (v) { return v !== null; });
-        h += '<div class="panel" style="margin-top:16px"><div class="panel-title">全科名次变化</div><div class="panel-sub">按成绩录入里手填的班级名次</div>' + (hasCS ? drChart(function (w) {
-          var n2 = Math.max.apply(null, csv.filter(function (v) { return v !== null; }).concat([2]));
-          return CH.lines([{ name: '班级名次', color: CH.C.s1, values: csv.map(function (v) { return v === null ? null : n2 - v + 1; }) }], trend.map(function (t) { return shortExam(t.ex.name); }), w, { h: 200, min: 1, max: n2, fmt: function (v) { return '第' + Math.round(n2 - v + 1); }, tipFmt: function (v) { return '第 ' + Math.round(n2 - v + 1) + ' 名'; } });
-        }) : '<div class="empty">还没有填写班级名次。到「成绩录入」页的「班级名次」一列填上，这里就会显示变化</div>') + '</div>';
+        var cgv = trend.map(function (t) { return rankGR(t.ex, st.id); });
+        var pool = csv.concat(cgv).filter(function (v) { return v !== null; });
+        var c2 = CH.C.s2 || CH.C.s1;
+        h += '<div class="panel" style="margin-top:16px"><div class="panel-title">全科名次变化</div><div class="panel-sub">按成绩录入里手填的班级名次 / 级部名次</div>' + (pool.length ? drChart(function (w) {
+          var n2 = Math.max.apply(null, pool.concat([2]));
+          return CH.lines([{ name: '班级名次', color: CH.C.s1, values: csv.map(function (v) { return v === null ? null : n2 - v + 1; }) }, { name: '级部名次', color: c2, values: cgv.map(function (v) { return v === null ? null : n2 - v + 1; }), width: 1.6, dot: 3 }], trend.map(function (t) { return shortExam(t.ex.name); }), w, { h: 200, min: 1, max: n2, fmt: function (v) { return '第' + Math.round(n2 - v + 1); }, tipFmt: function (v) { return '第 ' + Math.round(n2 - v + 1) + ' 名'; } });
+        }) : '<div class="empty">还没有填写班级名次或级部名次。到「成绩录入」页对应两列填上，这里就会显示变化</div>') +
+          '<div class="legend"><span><i style="background:' + CH.C.s1 + '"></i>班级名次</span><span><i style="background:' + c2 + '"></i>级部名次</span></div></div>';
       }
     }
   } else if (tab === 'records') {
