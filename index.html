@@ -1901,7 +1901,7 @@ var ART = (function () {
 /* =========================================================
    CORE · 工具函数、存储、数据模型（多班级）、示例数据、查询与统计
    ========================================================= */
-var VERSION = '2.6.2';
+var VERSION = '2.6.3';
 var STORE_KEY = 'bzr-workbench-v2';
 /* 旧版本的数据：v1.1 班主任工作台（单个班）、任课教师工作台。第一次打开 v2.0 时自动接过来，旧数据原样保留 */
 var LEGACY_KEYS = ['bzr-workbench-v1', 'rk-workbench-v1'];
@@ -6444,23 +6444,6 @@ function hrStatsAll(ex) {
 function hrDetailAllHTML(ex) {
   var s = hrStatsAll(ex), thr = S.settings.thr, full = s.full, many = (ex.cids || []).length > 1;
   var h = '<div class="an-sub"><div><b>' + esc(ex.name) + '</b><span class="muted">' + esc(ex.date) + ' · ' + s.n + ' 人参考 · 满分 ' + full + '</span></div></div>';
-  h += '<div class="stat-row">' +
-    '<div class="kpi"><div class="k">平均分</div><div class="v">' + fmtNum(s.avg, 1) + '<small>/ ' + full + '</small></div><div class="d muted">得分率 ' + pct(s.rate) + '</div></div>' +
-    '<div class="kpi"><div class="k">及格率 <span class="muted">≥' + thr.pass + '%</span></div><div class="v">' + pct(s.pass) + '</div></div>' +
-    '<div class="kpi"><div class="k">优秀率 <span class="muted">≥' + thr.good + '%</span></div><div class="v">' + pct(s.good) + '</div></div>' +
-    '<div class="kpi"><div class="k">低分率</div><div class="v">' + pct(s.low) + '</div></div>' +
-    '<div class="kpi"><div class="k">最高 / 最低</div><div class="v">' + fmtNum(s.max, 1) + '<small>/ ' + fmtNum(s.min, 1) + '</small></div></div>' +
-    '<div class="kpi"><div class="k">标准差</div><div class="v">' + fmtNum(s.sd, 1) + '</div><div class="d muted">越小越集中</div></div></div>';
-  var bins = 10, step = full / bins, cts = [];
-  for (var i = 0; i < bins; i++) cts.push(0);
-  s.rows.forEach(function (r) { cts[Math.min(bins - 1, Math.max(0, Math.floor(r.total / step)))]++; });
-  var lo = 0; while (lo < bins - 1 && cts[lo] === 0) lo++;
-  var binLabel = function (k) { return Math.round(k * step) + '–' + Math.round((k + 1) * step); };
-  h += '<div class="panel" style="margin-top:16px"><div class="panel-title">分数段分布</div><div class="panel-sub">每段 ' + fmtNum(step, 0) + ' 分，柱上为人数</div>' + UI.chart(function (w) {
-    var data = [];
-    for (var j = lo; j < bins; j++) data.push({ label: binLabel(j), value: cts[j], tip: '<b>' + binLabel(j) + ' 分</b><br>' + cts[j] + ' 人（' + pct(cts[j] / s.n) + '）', color: (j + 1) * step > thrLine(full, 'good') ? '#256abf' : (j + 1) * step <= thrLine(full, 'pass') ? '#9ec5f4' : CH.C.s1 });
-    return CH.bars(data, w, { h: 240, fmt: function (v) { return String(Math.round(v)); } });
-  }) + '</div>';
   h += '<div class="panel" style="margin-top:16px;padding:20px 0 6px"><div style="padding:0 20px"><div class="panel-title">成绩排名</div><div class="panel-sub">按全科折算总分排序；后两列是你手填的班级名次、级部名次</div></div><div style="max-height:520px;overflow:auto"><table class="tbl"><thead><tr><th>名次</th><th>姓名</th>' + (many ? '<th>班级</th>' : '') + '<th class="r">总分</th><th class="r">班级名次</th><th class="r">级部名次</th></tr></thead><tbody>' +
     s.rows.map(function (r) {
       var st = stuById(r.sid), k = clsById(r.cid), cs = rankCS(ex, r.sid), gr = rankGR(ex, r.sid), low = r.total < thrLine(full, 'pass');
