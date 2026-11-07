@@ -6243,7 +6243,7 @@ UI.act['exam-save'] = function (el) {
     }
     ex.name = name; ex.date = date; ex.type = type; ex.cids = cids; ex.parts = parts; ex.subs = subs; if (!ex.ss) ex.ss = {};
     if (own) delete ex.own; else ex.own = false;
-  } else { var nx = { id: uid('ex'), name: name, date: date, type: type, cids: cids, parts: parts, scores: {}, subs: subs, ss: {} }; if (!own) nx.own = false; S.exams.push(nx); Sc.exam = nx.id; Sc.cid = withHr ? hrId : cids[0]; }
+  } else { var nx = { id: uid('ex'), name: name, date: date, type: type, cids: cids, parts: parts, scores: {}, subs: subs, ss: {} }; if (!own) nx.own = false; S.exams.push(nx); Sc.exam = nx.id; Sc.cid = cids[0]; }
   save(); UI.closeModal(); UI.go('scores');
   setTimeout(function () { var c = cellAt(0, 0); if (c && !id) c.focus(); }, 50);
 };
