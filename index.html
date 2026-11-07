@@ -1786,7 +1786,7 @@ var ART = (function () {
 /* =========================================================
    CORE · 工具函数、存储、数据模型（多班级）、示例数据、查询与统计
    ========================================================= */
-var VERSION = '2.2.0';
+var VERSION = '2.3.0';
 var STORE_KEY = 'bzr-workbench-v2';
 /* 旧版本的数据：v1.1 班主任工作台（单个班）、任课教师工作台。第一次打开 v2.0 时自动接过来，旧数据原样保留 */
 var LEGACY_KEYS = ['bzr-workbench-v1', 'rk-workbench-v1'];
@@ -2145,6 +2145,7 @@ function migrate(s) {
     if (!Array.isArray(e.parts) || !e.parts.length) e.parts = [{ name: '成绩', full: +e.full > 0 ? +e.full : 100 }];
     e.parts = e.parts.filter(function (x) { return x && x.name; }).map(function (x) { return { name: x.name, full: +x.full > 0 ? +x.full : 100 }; });
     if (!e.parts.length) e.parts = [{ name: '成绩', full: 100 }];
+    if (!e.ranks || typeof e.ranks !== 'object' || Array.isArray(e.ranks)) e.ranks = {};
     if (!Array.isArray(e.cids)) e.cids = [];
     if (!e.scores || typeof e.scores !== 'object') e.scores = {};
     if (!e.name) e.name = '未命名考试';
@@ -6087,7 +6088,7 @@ Sc.renderGrid = function () {
   if (hrMode) { el.innerHTML = h + hrGridHTML(ex, many); bindGrid(el); return; }
   h += '<div class="paste-hint">' + ICON.copy + '<span>在 Excel 里按学号顺序选中分数区域复制，点一下表格里的起始格子，<span class="kbd">Ctrl</span> + <span class="kbd">V</span> 整块填入。缺考填「缺」，回车跳到下一位同学。</span></div>' +
     '<div class="tbl-wrap" style="max-height:calc(100vh - ' + (many ? 300 : 250) + 'px)"><table class="tbl grid-tbl"><thead><tr><th>学号</th><th>姓名</th>' +
-    ex.parts.map(function (p) { return '<th class="c">' + esc(multi ? p.name : '成绩') + ' <small>' + p.full + '</small></th>'; }).join('') + (multi ? '<th class="c">总分</th>' : '') + '<th class="c">班内名次</th>' + (many ? '<th class="c">平行班名次</th>' : '') + '</tr></thead><tbody>';
+    ex.parts.map(function (p) { return '<th class="c">' + esc(multi ? p.name : '成绩') + ' <small>' + p.full + '</small></th>'; }).join('') + (multi ? '<th class="c">总分</th>' : '') + '<th class="c">班级名次</th><th class="c">级部排名</th><th class="c">区排名</th><th class="c">备注</th></tr></thead><tbody>';
   var list = studentsOf(Sc.cid);
   if (!list.length) h += '<tr><td colspan="' + (ex.parts.length + 5) + '"><div class="empty">这个班还没有学生，先去「学生名单」导入</div></td></tr>';
   list.forEach(function (st, ri2) {
@@ -6095,10 +6096,28 @@ Sc.renderGrid = function () {
     h += '<tr data-sid="' + st.id + '"><td class="num muted">' + esc(st.no || '') + '</td><td><b style="font-weight:500">' + stuNmH(st) + '</b></td>' + ex.parts.map(function (p, ci) {
       var v = row[p.name], txt = v === null ? '缺' : (v === undefined ? '' : v);
       return '<td class="cell"><input class="sc-in' + cellCls(v, p.full) + '" data-r="' + ri2 + '" data-c="' + ci + '" data-sid="' + st.id + '" data-sub="' + esc(p.name) + '" data-full="' + p.full + '" value="' + esc(txt) + '" inputmode="decimal" aria-label="' + esc(st.name + ' ' + p.name) + '"></td>';
-    }).join('') + (multi ? '<td class="tot" data-tot="' + st.id + '">' + (r ? fmtNum(r.total, 1) : '') + '</td>' : '') + '<td class="rk" data-crk="' + st.id + '">' + (r ? r.crank : '') + '</td>' + (many ? '<td class="rk" data-rk="' + st.id + '">' + (r ? r.rank : '') + '</td>' : '') + '</tr>';
+    }).join('') + (multi ? '<td class="tot" data-tot="' + st.id + '">' + (r ? fmtNum(r.total, 1) : '') + '</td>' : '') + rankCells(ex, st.id) + '</tr>';
   });
   el.innerHTML = h + '</tbody></table></div>';
   bindGrid(el);
+};
+/* 班级 / 级部 / 区名次和备注由老师手填，不再自动排名 */
+var RANK_IN_STYLE = 'width:58px;text-align:center;border:0;background:transparent;font:inherit;color:inherit;padding:2px 0';
+function rankVal(ex, sid, k) { var r = (ex.ranks || {})[sid]; return r && r[k] != null ? r[k] : ''; }
+function rankCells(ex, sid) {
+  return [['cs', '班级名次'], ['gr', '级部排名'], ['ds', '区排名'], ['nt', '备注']].map(function (kv) {
+    var k = kv[0], wide = k === 'nt';
+    return '<td class="rk-cell"><input class="rk-in" data-inp="sc-rank" data-id="' + ex.id + '" data-sid="' + sid + '" data-k="' + k + '" value="' + esc(rankVal(ex, sid, k)) + '" placeholder="' + (wide ? '选填' : '—') + '" inputmode="' + (wide ? 'text' : 'numeric') + '" aria-label="' + kv[1] + '" style="' + RANK_IN_STYLE + (wide ? ';width:110px;text-align:left' : '') + '"></td>';
+  }).join('');
+}
+UI.inp['sc-rank'] = function (el) {
+  var ex = examById(el.getAttribute('data-id')); if (!ex) return;
+  var sid = el.getAttribute('data-sid'), k = el.getAttribute('data-k');
+  if (!ex.ranks) ex.ranks = {};
+  if (!ex.ranks[sid]) ex.ranks[sid] = {};
+  var v = el.value.trim();
+  if (!v) delete ex.ranks[sid][k]; else ex.ranks[sid][k] = v;
+  save();
 };
 function bindGrid(el) {
   var tb = el.querySelector('.grid-tbl'); if (!tb) return;
@@ -6121,7 +6140,7 @@ function hrGridHTML(ex, many) {
   h += cols.map(function (c) {
     var w = c.k === 'ss' ? subWeight(c.name) : 1;
     return '<th class="c' + (c.k === 'own' ? ' own-col' : '') + '">' + esc(c.label) + ' <small>' + c.full + (w !== 1 ? ' ×' + w : '') + '</small></th>';
-  }).join('') + (own && multi ? '<th class="c">' + esc(ownName()) + '合计</th>' : '') + '<th class="c">全科总分<small>折算</small></th><th class="c">班级名次</th></tr></thead><tbody>';
+  }).join('') + (own && multi ? '<th class="c">' + esc(ownName()) + '合计</th>' : '') + '<th class="c">全科总分<small>折算</small></th><th class="c">班级名次</th><th class="c">级部排名</th><th class="c">区排名</th><th class="c">备注</th></tr></thead><tbody>';
   var list = studentsOf(Sc.cid);
   if (!list.length) h += '<tr><td colspan="' + (cols.length + 5) + '"><div class="empty">这个班还没有学生，先去「学生名单」导入</div></td></tr>';
   list.forEach(function (st, ri2) {
@@ -6129,7 +6148,7 @@ function hrGridHTML(ex, many) {
     h += '<tr data-sid="' + st.id + '"><td class="num muted">' + esc(st.no || '') + '</td><td><b style="font-weight:500">' + stuNmH(st) + '</b></td>' + cols.map(function (c, ci) {
       var v = c.k === 'own' ? row[c.name] : srow[c.name], txt = v === null ? '缺' : (v === undefined ? '' : v);
       return '<td class="cell' + (c.k === 'own' ? ' own-col' : '') + '"><input class="sc-in' + cellCls(v, c.full) + '" data-r="' + ri2 + '" data-c="' + ci + '" data-sid="' + st.id + '" data-k="' + c.k + '" data-sub="' + esc(c.name) + '" data-full="' + c.full + '" value="' + esc(txt) + '" inputmode="decimal" aria-label="' + esc(st.name + ' ' + c.label) + '"></td>';
-    }).join('') + (own && multi ? '<td class="tot" data-otot="' + st.id + '">' + (o ? fmtNum(o.total, 1) : '') + '</td>' : '') + '<td class="tot" data-htot="' + st.id + '">' + (r ? fmtNum(r.total, 1) : '') + '</td><td class="rk" data-hrk="' + st.id + '">' + (r ? r.rank : '') + '</td></tr>';
+    }).join('') + (own && multi ? '<td class="tot" data-otot="' + st.id + '">' + (o ? fmtNum(o.total, 1) : '') + '</td>' : '') + '<td class="tot" data-htot="' + st.id + '">' + (r ? fmtNum(r.total, 1) : '') + '</td>' + rankCells(ex, st.id) + '</tr>';
   });
   return h + '</tbody></table></div>';
 }
@@ -6321,13 +6340,13 @@ UI.act['score-export'] = function (el) {
   var ex = examById(el.getAttribute('data-id')), ri = rankInfo(ex), multi = multiPart(ex), full = isHrFull(ex), own = exOwn(ex), hr = hrRank(ex);
   var others = full ? hrSubs(ex).filter(function (x) { return !x.own; }) : [];
   function cell(v) { return v === null ? '缺考' : (v === undefined ? '' : v); }
-  var rows = [['班级', '学号', '姓名'].concat(own && multi ? ex.parts.map(function (p) { return p.name; }) : []).concat(own ? [ownName(), '班内名次', '平行班名次'] : []).concat(others.map(function (x) { return x.name; })).concat(full ? ['全科总分', '全科名次'] : [])];
+  var rows = [['班级', '学号', '姓名'].concat(own && multi ? ex.parts.map(function (p) { return p.name; }) : []).concat(own ? [ownName()] : []).concat(['班级名次', '级部排名', '区排名', '备注']).concat(others.map(function (x) { return x.name; })).concat(full ? ['全科总分'] : [])];
   ex.cids.forEach(function (cid) {
     var c = clsById(cid); if (!c) return;
     studentsOf(cid).forEach(function (st) {
       var row = ex.scores[st.id] || {}, r = ri.m[st.id], h = isHr(cid) ? hr.m[st.id] : null;
-      rows.push([c.name, st.no, st.name].concat(own && multi ? ex.parts.map(function (p) { return cell(row[p.name]); }) : []).concat(own ? [r ? r.total : (stuAbsent(ex, st.id) ? '缺考' : ''), r ? r.crank : '', r ? r.rank : ''] : [])
-        .concat(others.map(function (x) { return isHr(cid) ? cell(hrVal(ex, st.id, x)) : ''; })).concat(full ? [h ? h.total : '', h ? h.rank : ''] : []));
+      rows.push([c.name, st.no, st.name].concat(own && multi ? ex.parts.map(function (p) { return cell(row[p.name]); }) : []).concat(own ? [r ? r.total : (stuAbsent(ex, st.id) ? '缺考' : '')] : []).concat([rankVal(ex, st.id, 'cs'), rankVal(ex, st.id, 'gr'), rankVal(ex, st.id, 'ds'), rankVal(ex, st.id, 'nt')])
+        .concat(others.map(function (x) { return isHr(cid) ? cell(hrVal(ex, st.id, x)) : ''; })).concat(full ? [h ? h.total : ''] : []));
     });
   });
   downloadFile(ex.name + '-成绩.csv', toCSV(rows), 'text/csv;charset=utf-8');
