@@ -1786,7 +1786,7 @@ var ART = (function () {
 /* =========================================================
    CORE · 工具函数、存储、数据模型（多班级）、示例数据、查询与统计
    ========================================================= */
-var VERSION = '2.3.1';
+var VERSION = '2.3.2';
 var STORE_KEY = 'bzr-workbench-v2';
 /* 旧版本的数据：v1.1 班主任工作台（单个班）、任课教师工作台。第一次打开 v2.0 时自动接过来，旧数据原样保留 */
 var LEGACY_KEYS = ['bzr-workbench-v1', 'rk-workbench-v1'];
@@ -5406,14 +5406,20 @@ function noFreeIn(used) {
   var i = 1; while (used[noKey(pad2(i))] || used[String(i)]) i++;
   used[noKey(pad2(i))] = 1; return pad2(i);
 }
-function nextNoGlobal() {
-  var used = {}; allStudents().forEach(function (x) { var k = noKey(x.no); if (k) used[k] = 1; });
-  return noFreeIn(used);
+function nextNoGlobal(extra) {
+  var max = 0, pre = '', w = 2;
+  allStudents().concat(extra || []).forEach(function (s) {
+    var m = String(s.no || '').match(/^(.*?)(\d+)$/);
+    if (m && +m[2] > max) { max = +m[2]; pre = m[1]; w = m[2].length; }
+  });
+  if (!max) return pad2(allStudents().length + (extra ? extra.length : 0) + 1);
+  var n = String(max + 1); while (n.length < w) n = '0' + n;
+  return pre + n;
 }
 function openStudentForm(st, opts) {
   if (!S.classes.length) { UI.toast('先新建一个班级'); openClassForm(null); return; }
   var isNew = !st, c0 = st ? clsOfStu(st.id) : (clsById(opts.cid) || curCls());
-  var d = st ? deepClone(st) : { id: uid('stu'), name: '', gender: 'M', no: nextNoIn(c0), tags: [], note: '', comments: [] };
+  var d = st ? deepClone(st) : { id: uid('stu'), name: '', gender: 'M', no: nextNoGlobal(), tags: [], note: '', comments: [] };
   var hrOn = isHr(c0.id), tagPool = STU_TAGS.concat(HR_TAGS);
   Stu.form = d; Stu.formSeat = isNew && opts.seat ? { cid: c0.id, key: opts.seat } : null;
   var body = '<div class="row3"><div class="field"><label>姓名<span class="req">*</span></label><input class="inp" id="fName" value="' + esc(d.name) + '" autofocus maxlength="20" data-inp="f-name"></div>' +
@@ -5646,7 +5652,7 @@ UI.act['imp-go'] = function () {
   var target = clsById($('#impCls').value), added = 0, skipped = 0, renum = 0, byName = {};
   S.classes.forEach(function (c) { byName[c.name.replace(/\s/g, '')] = c; });
   // 只拿导入前已有的同学判重：名单里两个同名的都会加进来；没带学号的同名行，班里已有几个就跳过几个（重复导入同一份名单不会翻倍）
-  var before = {}, left = {};
+  var before = {}, left = {}, pending = [];
   S.classes.forEach(function (c) { before[c.id] = c.students.slice(); left[c.id] = {}; c.students.forEach(function (s) { left[c.id][s.name] = (left[c.id][s.name] || 0) + 1; }); });
   r.rows.forEach(function (row) {
     function g(k) { return r.map[k] !== undefined ? (row[r.map[k]] || '').trim() : ''; }
@@ -5655,7 +5661,7 @@ UI.act['imp-go'] = function () {
     if (no ? before[c.id].some(function (s) { return s.name === name && String(s.no) === no; }) : left[c.id][name] > 0) { if (!no) left[c.id][name]--; skipped++; return; }
     if (no && stuNoOwner(no, '')) { no = ''; renum++; }   // 学号已经有人用了：自动换一个，不和别人撞号（全局唯一）
     var tags = g('tags') ? g('tags').split(/[、,，;；\s]+/).filter(Boolean) : [];
-    var nx = { id: uid('stu'), name: name, gender: /女|f/i.test(g('gender')) ? 'F' : 'M', no: no || nextNoGlobal(), tags: tags, note: g('note'), comments: [] };
+    var nx = { id: uid('stu'), name: name, gender: /女|f/i.test(g('gender')) ? 'F' : 'M', no: no || nextNoGlobal(pending), tags: tags, note: g('note'), comments: [] };
     if (isHr(c.id)) {
       var bd = g('birthday').replace(/[年月\/.]/g, '-').replace(/日/g, ''), bp = bd.split('-');
       nx.birthday = bp.length === 3 && +bp[0] ? bp[0] + '-' + pad2(+bp[1]) + '-' + pad2(+bp[2]) : '';
@@ -5666,7 +5672,7 @@ UI.act['imp-go'] = function () {
       nx.familyNote = FAMILY_TYPES.indexOf(fm) >= 0 || !fm ? g('familyNote') : [fm, g('familyNote')].filter(Boolean).join('；');
       nx.study = g('study'); nx.personality = g('personality'); nx.health = g('health');
     } else if (g('role')) g('role').split(/[、,，;；\s]+/).forEach(function (t) { if (t && nx.tags.indexOf(t) < 0) nx.tags.push(t); });
-    c.students.push(nx);
+    c.students.push(nx); pending.push(nx);
     added++;
   });
   save(); UI.closeModal(); refreshAfterChange();
