@@ -1901,7 +1901,7 @@ var ART = (function () {
 /* =========================================================
    CORE · 工具函数、存储、数据模型（多班级）、示例数据、查询与统计
    ========================================================= */
-var VERSION = '2.6.3';
+var VERSION = '2.6.4';
 var STORE_KEY = 'bzr-workbench-v2';
 /* 旧版本的数据：v1.1 班主任工作台（单个班）、任课教师工作台。第一次打开 v2.0 时自动接过来，旧数据原样保留 */
 var LEGACY_KEYS = ['bzr-workbench-v1', 'rk-workbench-v1'];
@@ -6444,10 +6444,15 @@ function hrStatsAll(ex) {
 function hrDetailAllHTML(ex) {
   var s = hrStatsAll(ex), thr = S.settings.thr, full = s.full, many = (ex.cids || []).length > 1;
   var h = '<div class="an-sub"><div><b>' + esc(ex.name) + '</b><span class="muted">' + esc(ex.date) + ' · ' + s.n + ' 人参考 · 满分 ' + full + '</span></div></div>';
-  h += '<div class="panel" style="margin-top:16px;padding:20px 0 6px"><div style="padding:0 20px"><div class="panel-title">成绩排名</div><div class="panel-sub">按全科折算总分排序；后两列是你手填的班级名次、级部名次</div></div><div style="max-height:520px;overflow:auto"><table class="tbl"><thead><tr><th>名次</th><th>姓名</th>' + (many ? '<th>班级</th>' : '') + '<th class="r">总分</th><th class="r">班级名次</th><th class="r">级部名次</th></tr></thead><tbody>' +
-    s.rows.map(function (r) {
+  h += '<div class="panel" style="margin-top:16px;padding:20px 0 6px"><div style="padding:0 20px"><div class="panel-title">成绩排名</div><div class="panel-sub">按级部排名排序（没填级部排名的排在最后）；后两列是你手填的班级名次、级部名次</div></div><div style="max-height:520px;overflow:auto"><table class="tbl"><thead><tr><th>名次</th><th>姓名</th>' + (many ? '<th>班级</th>' : '') + '<th class="r">总分</th><th class="r">班级名次</th><th class="r">级部名次</th></tr></thead><tbody>' +
+    s.rows.slice().sort(function (a, b) {
+      var ga = rankGR(ex, a.sid), gb = rankGR(ex, b.sid);
+      ga = ga === null ? 1e9 : ga; gb = gb === null ? 1e9 : gb;
+      if (ga !== gb) return ga - gb;
+      return b.total - a.total;
+    }).map(function (r, i) {
       var st = stuById(r.sid), k = clsById(r.cid), cs = rankCS(ex, r.sid), gr = rankGR(ex, r.sid), low = r.total < thrLine(full, 'pass');
-      return '<tr class="click" data-act="open-stu" data-sid="' + r.sid + '"><td class="num">' + r.rank + '</td><td><div class="nm">' + stuAva(st, 22) + stuNmH(st) + '</div></td>' + (many ? '<td><span class="ctag"><i class="cdot" style="background:' + clsColor(k) + '"></i>' + esc(k.name) + '</span></td>' : '') +
+      return '<tr class="click" data-act="open-stu" data-sid="' + r.sid + '"><td class="num">' + (i + 1) + '</td><td><div class="nm">' + stuAva(st, 22) + stuNmH(st) + '</div></td>' + (many ? '<td><span class="ctag"><i class="cdot" style="background:' + clsColor(k) + '"></i>' + esc(k.name) + '</span></td>' : '') +
         '<td class="r num' + (low ? ' dn' : '') + '"><b>' + fmtNum(r.total, 1) + '</b></td><td class="r num">' + (cs === null ? '<span class="muted">—</span>' : cs) + '</td><td class="r num">' + (gr === null ? '<span class="muted">—</span>' : gr) + '</td></tr>';
     }).join('') + '</tbody></table></div></div>';
   return h;
