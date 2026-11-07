@@ -1904,7 +1904,7 @@ var ART = (function () {
 /* =========================================================
    CORE · 工具函数、存储、数据模型（多班级）、示例数据、查询与统计
    ========================================================= */
-var VERSION = '2.6.5';
+var VERSION = '2.6.6';
 var STORE_KEY = 'bzr-workbench-v2';
 /* 旧版本的数据：v1.1 班主任工作台（单个班）、任课教师工作台。第一次打开 v2.0 时自动接过来，旧数据原样保留 */
 var LEGACY_KEYS = ['bzr-workbench-v1', 'rk-workbench-v1'];
@@ -5572,6 +5572,27 @@ UI.inp['f-name'] = dupHintUpdate;
    ========================================================= */
 
 /* ---------- 表单：班主任班才显示的档案字段 ---------- */
+/* 本版修改：学习情况 / 性格与特长 / 健康情况 / 家庭备注 改成可勾选的标签 */
+var PROF_TAGS = {
+  study: ['基础扎实', '基础薄弱', '计算粗心', '审题不细', '书写潦草', '阅读量大', '作业拖拉', '专注力好', '容易走神', '主动提问', '需要督促', '进步明显', '偏科数学', '偏科英语', '偏科语文', '学具不齐'],
+  personality: ['开朗外向', '内向安静', '沉稳', '活泼好动', '有耐心', '领导力强', '乐于助人', '自尊心强', '抗挫力弱', '爱表现', '绘画', '音乐', '体育', '编程', '演讲', '书法', '舞蹈', '棋类'],
+  health: ['视力需注意', '近视', '过敏体质', '哮喘', '需按时服药', '易感冒', '肠胃弱', '运动受限', '睡眠不足', '挑食', '晕车', '需忌口'],
+  familyNote: ['家长配合度高', '家长工作忙', '祖辈接送', '接送不定时', '单亲家庭', '二胎家庭', '需提前沟通', '家长回复慢', '全托代管']
+};
+function profArr(d, k) { var v = d && d.prof && d.prof[k]; return Array.isArray(v) ? v.slice() : []; }
+function profChipsHTML(d, k) {
+  var on = profArr(d, k);
+  return '<div class="chips" data-prof="' + k + '">' + PROF_TAGS[k].map(function (t) {
+    return '<button type="button" class="' + (on.indexOf(t) >= 0 ? 'on' : '') + '" data-act="prof-tag" data-k="' + k + '" data-t="' + esc(t) + '">' + esc(t) + '</button>';
+  }).join('') + '</div>';
+}
+function profText(st, k) {
+  var a = profArr(st, k).slice(), txt = String((st && st[k]) || '').trim();
+  if (txt) a.push(txt);
+  return a.join('、');
+}
+function profShow(st, k) { return esc(profText(st, k)); }
+function profLine(st, k) { var v = profShow(st, k); return v || '<span class="muted">未填写</span>'; }
 function hrFormHTML(d) {
   var ps = (d.parents || []).slice();
   while (ps.length < 2) ps.push({ name: '', rel: ps.length ? '父亲' : '母亲', phone: '', job: '' });
@@ -5588,10 +5609,10 @@ function hrFormHTML(d) {
     '<div class="field"><label>住宿</label><div class="seg light" id="fBoard"><button type="button" class="' + (!d.boarding ? 'on' : '') + '" data-act="f-board" data-v="0">走读</button><button type="button" class="' + (d.boarding ? 'on' : '') + '" data-act="f-board" data-v="1">住校</button></div></div></div>' +
     '<div class="row2"><div class="field"><label>家庭结构</label><select class="sel" id="fFam">' + FAMILY_TYPES.map(function (t) { return '<option' + ((d.family || '双亲家庭') === t ? ' selected' : '') + '>' + t + '</option>'; }).join('') + '</select></div><div></div></div>' +
     pf(0) + pf(1) +
-    '<div class="field"><label>家庭备注</label><textarea class="ta" id="fFamNote" maxlength="500" placeholder="家庭氛围、监护人、沟通习惯等">' + esc(d.familyNote || '') + '</textarea></div>' +
-    '<div class="field"><label>学习情况</label><textarea class="ta" id="fStudy" maxlength="500" placeholder="学习习惯、优势和薄弱学科、课堂表现">' + esc(d.study || '') + '</textarea></div>' +
-    '<div class="row2"><div class="field"><label>性格与特长</label><textarea class="ta" id="fPers" maxlength="300">' + esc(d.personality || '') + '</textarea></div>' +
-    '<div class="field"><label>健康情况</label><textarea class="ta" id="fHealth" maxlength="300" placeholder="过敏、视力、病史、体育课注意事项">' + esc(d.health || '') + '</textarea></div></div>' +
+    '<div class="field"><label>家庭备注<span class="muted" style="font-weight:400;margin-left:6px">可多选</span></label>' + profChipsHTML(d, 'familyNote') + '<textarea class="ta" id="fFamNote" maxlength="300" placeholder="补充：家庭氛围、监护人、沟通习惯等" style="margin-top:8px;min-height:52px">' + esc(d.familyNote || '') + '</textarea></div>' +
+    '<div class="field"><label>学习情况<span class="muted" style="font-weight:400;margin-left:6px">可多选</span></label>' + profChipsHTML(d, 'study') + '<textarea class="ta" id="fStudy" maxlength="300" placeholder="补充：学习习惯、优势和薄弱学科、课堂表现" style="margin-top:8px;min-height:52px">' + esc(d.study || '') + '</textarea></div>' +
+    '<div class="field"><label>性格与特长<span class="muted" style="font-weight:400;margin-left:6px">可多选</span></label>' + profChipsHTML(d, 'personality') + '<textarea class="ta" id="fPers" maxlength="200" placeholder="补充说明" style="margin-top:8px;min-height:52px">' + esc(d.personality || '') + '</textarea></div>' +
+    '<div class="field"><label>健康情况<span class="muted" style="font-weight:400;margin-left:6px">可多选</span></label>' + profChipsHTML(d, 'health') + '<textarea class="ta" id="fHealth" maxlength="200" placeholder="补充：过敏、视力、病史、体育课注意事项" style="margin-top:8px;min-height:52px">' + esc(d.health || '') + '</textarea></div>' +
     '<datalist id="roleList">' + ROLES.map(function (r) { return '<option value="' + r + '">'; }).join('') + '</datalist>' +
     '<datalist id="relList"><option value="母亲"><option value="父亲"><option value="祖母"><option value="祖父"><option value="外祖母"><option value="外祖父"><option value="其他监护人"></datalist>';
 }
@@ -5600,11 +5621,25 @@ function hrReadForm(d) {
   d.birthday = $('#fBday').value; d.role = $('#fRole').value.trim();
   d.family = $('#fFam').value; d.familyNote = $('#fFamNote').value.trim(); d.study = $('#fStudy').value.trim();
   d.personality = $('#fPers').value.trim(); d.health = $('#fHealth').value.trim();
+  d.prof = d.prof || {};
+  ['familyNote', 'study', 'personality', 'health'].forEach(function (k) {
+    var box = $('#fHrBox .chips[data-prof="' + k + '"]');
+    if (!box) return;
+    d.prof[k] = Array.prototype.slice.call(box.querySelectorAll('button.on')).map(function (b) { return b.getAttribute('data-t'); });
+  });
   d.parents = [0, 1].map(function (i) { return { name: $('#fP' + i + 'n').value.trim(), rel: $('#fP' + i + 'r').value.trim(), phone: $('#fP' + i + 'p').value.trim(), job: $('#fP' + i + 'j').value.trim() }; }).filter(function (p) { return p.name || p.phone; });
   if (!Array.isArray(d.tags)) d.tags = [];
   if (d.boarding && d.tags.indexOf('住校') < 0) d.tags.push('住校');
   if (!d.boarding) d.tags = d.tags.filter(function (t) { return t !== '住校'; });
 }
+UI.act['prof-tag'] = function (el) {
+  var k = el.getAttribute('data-k'), t = el.getAttribute('data-t'), d = Stu.form;
+  if (!d.prof) d.prof = {};
+  var a = profArr(d, k), i = a.indexOf(t);
+  if (i >= 0) a.splice(i, 1); else a.push(t);
+  d.prof[k] = a;
+  el.classList.toggle('on', i < 0);
+};
 UI.act['f-board'] = function (el) { Stu.form.boarding = el.getAttribute('data-v') === '1'; $$('#fBoard button').forEach(function (b) { b.classList.toggle('on', b === el); }); };
 UI.chg['f-cls'] = function (el) {
   var box = $('#fHrBox'); if (box) box.classList.toggle('hide', !isHr(el.value));
@@ -5661,8 +5696,8 @@ function hrDrawerTab(st, b) {
       '<div class="kpi"><div class="k">课堂积分</div><div class="v">' + (pts > 0 ? '+' : '') + pts + '</div><div class="d muted">' + S.points.filter(function (p) { return p.sid === st.id; }).length + ' 次点评</div></div>' +
       '<div class="kpi"><div class="k">生日</div><div class="v" style="font-size:19px">' + (st.birthday ? fmtMD(st.birthday) : '—') + '</div><div class="d muted">' + (daysToBirthday(st) === null ? '未填写' : daysToBirthday(st) === 0 ? '就是今天' : daysToBirthday(st) + ' 天后') + '</div></div></div>';
     h += '<div class="panel" style="margin-top:16px"><div class="info-grid">' +
-      '<div class="k">学习情况</div><div>' + (esc(st.study) || '<span class="muted">未填写</span>') + '</div>' +
-      '<div class="k">性格特长</div><div>' + (esc(st.personality) || '<span class="muted">未填写</span>') + '</div>' +
+      '<div class="k">学习情况</div><div>' + profLine(st, 'study') + '</div>' +
+      '<div class="k">性格特长</div><div>' + (profShow(st, 'personality') || '<span class="muted">未填写</span>') + '</div>' +
       '<div class="k">家庭情况</div><div>' + (esc([st.family, st.familyNote].filter(Boolean).join(' · ')) || '<span class="muted">未填写</span>') + '</div>' +
       (st.health ? '<div class="k">健康</div><div>' + esc(st.health) + '</div>' : '') +
       (st.note ? '<div class="k">老师备注</div><div>' + esc(st.note) + '</div>' : '') + '</div></div>';
@@ -5677,10 +5712,10 @@ function hrDrawerTab(st, b) {
       '<div class="k">住宿</div><div>' + (st.boarding ? '住校' : '走读') + '</div><div class="k">本学期考勤</div><div>请假 ' + at.leave + ' 天 · 缺勤 ' + at.absent + ' 天 · 迟到 ' + at.late + ' 次</div></div></div>' +
       '<div class="panel" style="margin-top:16px"><div class="panel-title" style="margin-bottom:12px">家庭与联系人</div><div class="info-grid"><div class="k">家庭结构</div><div>' + esc(st.family || '—') + '</div>' +
       ps.map(function (p, i) { return '<div class="k">' + (i === 0 ? '主要联系人' : '其他联系人') + '</div><div>' + esc(p.name) + ' <span class="muted">' + esc(p.rel) + (p.job ? ' · ' + esc(p.job) : '') + '</span> <span class="num">' + esc(p.phone) + '</span>' + (p.phone ? ' <button class="btn btn-xs btn-ghost" data-act="copy-txt" data-t="' + esc(p.phone) + '">' + ICON.copy + '</button>' : '') + '</div>'; }).join('') +
-      '<div class="k">家庭备注</div><div>' + (esc(st.familyNote) || '—') + '</div></div></div>' +
+      '<div class="k">家庭备注</div><div>' + (profShow(st, 'familyNote') || '—') + '</div></div></div>' +
       '<div class="panel" style="margin-top:16px"><div class="panel-title" style="margin-bottom:12px">学习与成长</div><div class="info-grid">' +
-      '<div class="k">学习情况</div><div>' + (esc(st.study) || '—') + '</div><div class="k">性格特长</div><div>' + (esc(st.personality) || '—') + '</div>' +
-      '<div class="k">健康情况</div><div>' + (esc(st.health) || '—') + '</div><div class="k">老师备注</div><div>' + (esc(st.note) || '—') + '</div></div></div>' +
+      '<div class="k">学习情况</div><div>' + (profShow(st, 'study') || '—') + '</div><div class="k">性格特长</div><div>' + (profShow(st, 'personality') || '—') + '</div>' +
+      '<div class="k">健康情况</div><div>' + (profShow(st, 'health') || '—') + '</div><div class="k">老师备注</div><div>' + (esc(st.note) || '—') + '</div></div></div>' +
       '<div style="margin-top:14px;text-align:right"><button class="btn btn-dark" data-act="stu-edit" data-sid="' + st.id + '">' + ICON.edit + '编辑档案</button></div>';
   } else if (tab === 'scores') {
     var exs = hrExams();
@@ -7549,9 +7584,10 @@ function hrStudentContext(s) {
     ((s.tags || []).filter(function (t) { return t !== '住校'; }).length ? '；标签：' + s.tags.filter(function (t) { return t !== '住校'; }).join('、') : '') + '\n';
   if (s.family || s.familyNote) h += '家庭：' + (s.family || '') + (s.familyNote ? '；' + s.familyNote : '') + '\n';
   var rels = (s.parents || []).map(function (p) { return p.rel; }).filter(Boolean); if (rels.length) h += '主要联系的家长：' + rels.join('、') + '\n';
-  if (s.study) h += '学习情况：' + s.study + '\n';
-  if (s.personality) h += '性格特长：' + s.personality + '\n';
-  if (s.health) h += '健康情况：' + s.health + '\n';
+  if (profText(s, 'study')) h += '学习情况：' + profText(s, 'study') + '\n';
+  if (profText(s, 'personality')) h += '性格特长：' + profText(s, 'personality') + '\n';
+  if (profText(s, 'health')) h += '健康情况：' + profText(s, 'health') + '\n';
+  if (profText(s, 'familyNote')) h += '家庭备注：' + profText(s, 'familyNote') + '\n';
   if (s.note) h += '其他备注：' + s.note + '\n';
   var tr = hrTrend(s.id).filter(function (t) { return t.total !== null; });
   if (tr.length) {
