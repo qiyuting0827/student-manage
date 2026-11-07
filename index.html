@@ -1904,7 +1904,7 @@ var ART = (function () {
 /* =========================================================
    CORE · 工具函数、存储、数据模型（多班级）、示例数据、查询与统计
    ========================================================= */
-var VERSION = '2.6.6';
+var VERSION = '2.7.0';
 var STORE_KEY = 'bzr-workbench-v2';
 /* 旧版本的数据：v1.1 班主任工作台（单个班）、任课教师工作台。第一次打开 v2.0 时自动接过来，旧数据原样保留 */
 var LEGACY_KEYS = ['bzr-workbench-v1', 'rk-workbench-v1'];
@@ -6379,7 +6379,7 @@ UI.act['sc-imp-go'] = function (el) {
    · 我教的科目（单科）：只看自己教的那一科，平行班对比（班主任班也在里面，只算这一科）
    每块先看「总览」（所有考试一张表、趋势、每位同学的历次成绩、需要关注），点某次考试再看这一次的详细分析
    ========================================================= */
-var An = { scope: '', exam: '', cmp: null, cid: '', mat: '' };
+var An = { scope: '', exam: '', cmp: null, cid: '', mat: '', pick: [] };
 
 function heatBg(rate) {
   if (rate === null || rate === undefined) return '';
@@ -6495,6 +6495,68 @@ function hrDetailAllHTML(ex) {
     }).join('') + '</tbody></table></div></div>';
   return h;
 }
+/* 本版修改：勾选两场考试，对比单科成绩、总分、班级名次、级部名次的进退 */
+function anCmpHTML(a, b) {
+  var subs = [], seenNm = {};
+  hrSubs(a).concat(hrSubs(b)).forEach(function (x) { if (!seenNm[x.name]) { seenNm[x.name] = 1; subs.push(x.name); } });
+  var seen = {}, sids = [];
+  [a, b].forEach(function (ex) { (ex.cids || []).forEach(function (cid) { studentsOf(cid).forEach(function (st) { if (!seen[st.id]) { seen[st.id] = 1; sids.push(st.id); } }); }); });
+  var rows = sids.map(function (sid) {
+    var st = stuById(sid); if (!st) return null;
+    var t1 = hrTotalOf(a, sid), t2 = hrTotalOf(b, sid);
+    var cs1 = rankCS(a, sid), cs2 = rankCS(b, sid), gr1 = rankGR(a, sid), gr2 = rankGR(b, sid);
+    if (t1 === null && t2 === null && cs1 === null && cs2 === null && gr1 === null && gr2 === null) return null;
+    var sd = {};
+    subs.forEach(function (nm) {
+      var x = hrSubs(a).filter(function (q) { return q.name === nm; })[0];
+      var y = hrSubs(b).filter(function (q) { return q.name === nm; })[0];
+      var v1 = x ? scoreNum(hrVal(a, sid, x)) : undefined, v2 = y ? scoreNum(hrVal(b, sid, y)) : undefined;
+      sd[nm] = (v1 !== undefined && v2 !== undefined) ? round1(v2 - v1) : null;
+    });
+    return { sid: sid, st: st, cid: (clsOfStu(sid) || {}).id,
+      t1: t1, t2: t2, dT: (t1 !== null && t2 !== null) ? round1(t2 - t1) : null,
+      cs1: cs1, cs2: cs2, dC: (cs1 !== null && cs2 !== null) ? cs1 - cs2 : null,
+      gr1: gr1, gr2: gr2, dG: (gr1 !== null && gr2 !== null) ? gr1 - gr2 : null, sd: sd };
+  }).filter(Boolean);
+  function moveOf(r) {
+    if (r.dG !== null) return { v: r.dG, u: '级部', th: 10 };
+    if (r.dC !== null) return { v: r.dC, u: '班级', th: 5 };
+    if (r.dT !== null) return { v: r.dT, u: '总分', th: 20 };
+    return null;
+  }
+  var up = [], dn = [];
+  rows.forEach(function (r) { var m = moveOf(r); if (!m) return; if (m.v >= m.th) up.push({ r: r, m: m }); else if (m.v <= -m.th) dn.push({ r: r, m: m }); });
+  up.sort(function (x, y) { return y.m.v - x.m.v; });
+  dn.sort(function (x, y) { return x.m.v - y.m.v; });
+  function fmtMove(r, m) {
+    var pre = m.u === '级部' ? ('级部 ' + (r.gr1 === null ? '—' : r.gr1) + '→' + (r.gr2 === null ? '—' : r.gr2))
+      : m.u === '班级' ? ('班级 ' + (r.cs1 === null ? '—' : r.cs1) + '→' + (r.cs2 === null ? '—' : r.cs2))
+      : ('总分 ' + (r.t1 === null ? '—' : fmtNum(r.t1, 1)) + '→' + (r.t2 === null ? '—' : fmtNum(r.t2, 1)));
+    return '<span class="' + (m.v > 0 ? 'up' : 'dn') + '">' + (m.v > 0 ? '↑' : '↓') + Math.abs(m.v) + '</span> <span class="muted" style="font-size:12px">' + pre + '</span>';
+  }
+  function listHTML(arr) {
+    if (!arr.length) return '<div class="empty">没有达到明显变化的学生</div>';
+    return '<div class="mini-list">' + arr.map(function (x) {
+      var st = x.r.st, k = clsById(x.r.cid);
+      return '<button class="mini-item" data-act="open-stu" data-sid="' + st.id + '">' + stuAva(st, 26) + '<span class="grow">' + stuNmH(st) + (k ? ' <span class="muted" style="font-size:12px">' + esc(k.name) + '</span>' : '') + '</span><span class="r">' + fmtMove(x.r, x.m) + '</span></button>';
+    }).join('') + '</div>';
+  }
+  var h = '<div class="panel"><div class="panel-title">成绩对比 · ' + esc(a.name) + ' → ' + esc(b.name) + '</div><div class="panel-sub">进步明显按级部名次前进 ≥ 10 名（没有级部名次看班级名次 ≥ 5 名，再没有看总分 ≥ 20 分）判定，退步同理。再点一下考试卡片可取消勾选</div>' +
+    '<div class="grid2" style="margin-top:14px"><div><div class="panel-title" style="font-size:13px">进步明显 · ' + up.length + ' 人</div>' + listHTML(up) + '</div>' +
+    '<div><div class="panel-title" style="font-size:13px">退步明显 · ' + dn.length + ' 人</div>' + listHTML(dn) + '</div></div></div>';
+  h += '<div class="panel" style="margin-top:16px;padding:20px 0 6px"><div style="padding:0 20px"><div class="panel-title">逐个学生变化</div><div class="panel-sub">各科列显示 B 相对 A 的分数变化；名次列显示 A→B 与进退</div></div><div style="max-height:560px;overflow:auto"><table class="tbl"><thead><tr><th>姓名</th><th>班级</th>' + subs.map(function (nm) { return '<th class="r">' + esc(nm) + ' Δ</th>'; }).join('') + '<th class="r">总分</th><th class="r">班级名次</th><th class="r">级部名次</th></tr></thead><tbody>' +
+    rows.slice().sort(function (x, y) { var gx = x.dG === null ? -1e9 : x.dG, gy = y.dG === null ? -1e9 : y.dG; if (gx !== gy) return gy - gx; return (y.dT || 0) - (x.dT || 0); }).map(function (r) {
+      var k = clsById(r.cid);
+      function dv(v) { return v === null ? '<span class="muted">—</span>' : (v > 0 ? '<span class="up">+' + fmtNum(v, 1) + '</span>' : v < 0 ? '<span class="dn">' + fmtNum(v, 1) + '</span>' : '0'); }
+      return '<tr class="click" data-act="open-stu" data-sid="' + r.sid + '"><td><div class="nm">' + stuAva(r.st, 22) + stuNmH(r.st) + '</div></td><td>' + (k ? '<span class="ctag"><i class="cdot" style="background:' + clsColor(k) + '"></i>' + esc(k.name) + '</span>' : '—') + '</td>' +
+        subs.map(function (nm) { return '<td class="r num">' + dv(r.sd[nm]) + '</td>'; }).join('') +
+        '<td class="r num">' + dv(r.dT) + '</td>' +
+        '<td class="r num">' + (r.cs1 === null && r.cs2 === null ? '<span class="muted">—</span>' : (r.cs1 === null ? '—' : r.cs1) + '→' + (r.cs2 === null ? '—' : r.cs2) + (r.dC === null ? '' : ' <span class="' + (r.dC > 0 ? 'up' : r.dC < 0 ? 'dn' : '') + '">' + (r.dC > 0 ? '↑' + r.dC : r.dC < 0 ? '↓' + (-r.dC) : '') + '</span>')) + '</td>' +
+        '<td class="r num">' + (r.gr1 === null && r.gr2 === null ? '<span class="muted">—</span>' : (r.gr1 === null ? '—' : r.gr1) + '→' + (r.gr2 === null ? '—' : r.gr2) + (r.dG === null ? '' : ' <span class="' + (r.dG > 0 ? 'up' : r.dG < 0 ? 'dn' : '') + '">' + (r.dG > 0 ? '↑' + r.dG : r.dG < 0 ? '↓' + (-r.dG) : '') + '</span>')) + '</td></tr>';
+    }).join('') + '</tbody></table></div></div>';
+  return h;
+}
+function anPickExams() { return (An.pick || []).map(function (id) { return examById(id); }).filter(Boolean); }
 UI.register('analysis', {
   render: function (main) {
     var hc = hrCls();
@@ -6514,7 +6576,7 @@ UI.register('analysis', {
     if (!data.length) h += '<div class="panel"><div class="empty">' + (scope === 'hr' ? esc(hc.name) + '还没有录入各科成绩的考试。新建考试时勾选其他科目，录完这里就有了。' : '这里还没有' + esc(ownName()) + '成绩') + '<div style="margin-top:14px"><button class="btn btn-dark" data-act="go" data-page="scores">去录入成绩</button></div></div></div>';
     else if (!ex) h += '<div class="panel"><div class="empty">还没有录成绩的考试</div></div>';
     else if (!anHas(scope, ex)) h += '<div class="panel"><div class="empty">「' + esc(ex.name) + '」还没有录入全科成绩<div style="margin-top:14px"><button class="btn btn-dark" data-act="an-entry" data-exam="' + ex.id + '">去录入这场考试</button></div></div></div>';
-    else h += hrDetailAllHTML(ex);
+    else { var pk2 = anPickExams(); h += (pk2.length === 2 ? anCmpHTML(pk2[0], pk2[1]) : hrDetailAllHTML(ex)); }
     main.innerHTML = h + '</div>';
   }
 });
@@ -6542,18 +6604,28 @@ function anClsChips() {
 function anStripHTML(list, ex) {
   var scope = An.scope, withData = list.filter(function (e) { return anHas(scope, e); });
   var h = '<div class="an-strip">';
+  var picked = An.pick || [];
   list.slice().reverse().forEach(function (e) {
-    var has = anHas(scope, e), st = has ? anStat(scope, e) : null, one = scope === 'hr' && !hrMulti(e);
+    var has = anHas(scope, e), st = has ? anStat(scope, e) : null, one = scope === 'hr' && !hrMulti(e), pk = picked.indexOf(e.id);
     var pe = has && !one ? (scope === 'hr' ? hrPrev(e) : anPrev(scope, e)) : null, ps = pe ? anStat(scope, pe) : null;
     var d = ps && ps.n ? st.rate - ps.rate : null;
-    h += '<button class="an-card' + (ex === e ? ' on' : '') + (has ? '' : ' nodata') + '" data-act="an-pick" data-id="' + e.id + '"><b>' + esc(e.name) + '</b><span>' + fmtShort(e.date) + ' · ' +
+    h += '<button class="an-card' + (pk >= 0 ? ' on' : '') + (has ? '' : ' nodata') + '" data-act="an-pick" data-id="' + e.id + '" style="position:relative">' + (pk >= 0 ? '<i style="position:absolute;top:6px;right:8px;font-style:normal;font-size:11px;color:var(--ink3)">对比' + (pk + 1) + '</i>' : '') + '<b>' + esc(e.name) + '</b><span>' + fmtShort(e.date) + ' · ' +
       (has ? (scope === 'hr' ? (one ? esc(hrSubs(e)[0].name) + ' ' : '总分 ') : '均分 ') + fmtNum(st.avg, 1) + (d === null || Math.abs(d) < 0.001 ? '' : ' <em class="' + (d > 0 ? 'up' : 'dn') + '">' + (d > 0 ? '↑' : '↓') + '</em>') : '未录成绩') + '</span></button>';
   });
   return h + '</div>';
 }
 UI.act['an-scope'] = function (el) { An.scope = el.getAttribute('data-v'); An.exam = ''; An.cmp = null; An.cid = ''; UI.rerender(); var m = $('#main .page'); if (m) m.scrollTop = 0; };
 UI.act['an-cls'] = function (el) { An.cid = el.getAttribute('data-c'); An.cmp = null; UI.rerender(); };
-UI.act['an-pick'] = function (el) { An.exam = el.getAttribute('data-id'); An.cmp = null; UI.rerender(); var m = $('#main .page'); if (m) m.scrollTop = 0; };
+UI.act['an-pick'] = function (el) {
+  var id = el.getAttribute('data-id');
+  An.pick = (An.pick || []).slice();
+  var i = An.pick.indexOf(id);
+  if (i >= 0) An.pick.splice(i, 1); else { An.pick.push(id); if (An.pick.length > 2) An.pick.shift(); }
+  var order = anList(An.scope).map(function (e) { return e.id; });
+  An.pick.sort(function (x, y) { return order.indexOf(x) - order.indexOf(y); });
+  An.exam = An.pick.length ? An.pick[An.pick.length - 1] : '';
+  An.cmp = null; UI.rerender(); var m = $('#main .page'); if (m) m.scrollTop = 0;
+};
 UI.chg['an-cmp'] = function (el) { An.cmp = el.value; UI.rerender(); };
 UI.act['an-entry'] = function (el) { Sc.exam = el.getAttribute('data-exam'); Sc.cid = An.scope === 'hr' ? (curCls() || {}).id : (An.cid || null); UI.go('scores'); };
 UI.act['an-mat'] = function (el) { An.mat = el.getAttribute('data-v'); UI.rerender(); };
