@@ -1786,7 +1786,7 @@ var ART = (function () {
 /* =========================================================
    CORE · 工具函数、存储、数据模型（多班级）、示例数据、查询与统计
    ========================================================= */
-var VERSION = '2.3.0';
+var VERSION = '2.3.1';
 var STORE_KEY = 'bzr-workbench-v2';
 /* 旧版本的数据：v1.1 班主任工作台（单个班）、任课教师工作台。第一次打开 v2.0 时自动接过来，旧数据原样保留 */
 var LEGACY_KEYS = ['bzr-workbench-v1', 'rk-workbench-v1'];
@@ -5306,7 +5306,7 @@ UI.register('students', {
     else Stu.cid = (curCls() || {}).id || '';
     var n = allStudents().length;
     main.innerHTML = '<div class="page scroll"><div class="page-head"><div><h1 class="page-title">学生名单</h1><div class="page-desc">' + S.classes.length + ' 个班 · 共 ' + n + ' 人 · 每个班都有完整档案（家庭、联系人、生日等）</div></div><div class="grow"></div>' +
-      '<button class="btn btn-ghost" data-act="stu-cls-edit">' + ICON.gear + '班级设置</button><button class="btn btn-light" data-act="stu-join">' + ICON.userplus + '从其他班加入</button><button class="btn btn-light" data-act="stu-import">' + ICON.up + '批量导入</button><button class="btn btn-light" data-act="stu-export">' + ICON.down + '导出名单</button><button class="btn btn-dark" data-act="stu-add">' + ICON.userplus + '添加学生</button></div>' +
+      '<button class="btn btn-ghost" data-act="stu-cls-edit">' + ICON.gear + '班级设置</button><button class="btn btn-ghost" data-act="stu-nocheck">学号查重</button><button class="btn btn-light" data-act="stu-join">' + ICON.userplus + '从其他班加入</button><button class="btn btn-light" data-act="stu-import">' + ICON.up + '批量导入</button><button class="btn btn-light" data-act="stu-export">' + ICON.down + '导出名单</button><button class="btn btn-dark" data-act="stu-add">' + ICON.userplus + '添加学生</button></div>' +
       '<div class="filterbar"><div class="chips" id="stuChips"></div><input class="inp" placeholder="在全部班级里搜姓名、学号、标签" value="' + esc(Stu.q) + '" data-inp="stu-q" id="stuQ" style="margin-left:auto"></div>' +
       '<div class="tbl-wrap" id="stuTbl"></div></div>';
     Stu.renderTable();
@@ -5357,6 +5357,25 @@ UI.act['stu-join'] = function () {
     }).join('') + '</div>',
     foot: '<button class="btn btn-light" data-act="modal-close">取消</button><button class="btn btn-dark" data-act="stu-join-ok">加入所选学生</button>' });
 };
+UI.act['stu-nocheck'] = function () {
+  var map = {}, dups = [];
+  allStudents().forEach(function (s) { var k = noKey(s.no); if (!k) return; (map[k] = map[k] || []).push(s); });
+  Object.keys(map).forEach(function (k) { if (map[k].length > 1) dups.push(map[k]); });
+  if (!dups.length) { UI.toast('学号没有重复，全部唯一'); return; }
+  var rows = dups.map(function (list) {
+    return '<div style="margin-bottom:10px"><b>' + esc(list[0].no || '') + ' 号</b>：' + list.map(function (s) { var c = clsOfStu(s.id); return esc(s.name) + '（' + esc(c ? c.name : '') + '）'; }).join('、') + '</div>';
+  }).join('');
+  UI.modal({ title: '学号重复', body:
+    '<div class="muted" style="font-size:12.5px;margin-bottom:12px">同一个学号只能属于一位学生。自动改号会保留每组第一位，其他人分配新的空学号。</div>' + rows,
+    foot: '<button class="btn btn-light" data-act="modal-close">知道了</button><button class="btn btn-dark" data-act="stu-nofix">自动改号</button>' });
+};
+UI.act['stu-nofix'] = function () {
+  var used = {}, map = {};
+  allStudents().forEach(function (s) { var k = noKey(s.no); if (k) { used[k] = 1; (map[k] = map[k] || []).push(s); } });
+  var n = 0;
+  Object.keys(map).forEach(function (k) { var list = map[k]; for (var i = 1; i < list.length; i++) { list[i].no = noFreeIn(used); n++; } });
+  save(); UI.closeModal(); refreshAfterChange(); UI.toast(n ? '已给 ' + n + ' 位学生分配了新学号' : '没有需要处理的重复学号');
+};
 UI.act['stu-join-ok'] = function () {
   var to = clsById(Stu.joinTo); if (!to) return;
   var ids = []; $$('.joinSid').forEach(function (i) { if (i.checked) ids.push(i.value); });
@@ -5374,6 +5393,22 @@ function nextNoIn(c) {
   if (!max) return pad2((c ? c.students.length : 0) + 1);
   var n = String(max + 1); while (n.length < w) n = '0' + n;
   return pre + n;
+}
+/* 学号全局唯一：同一个学号只能属于一位学生；同一学生跨班共用同一个学号，不算重复 */
+function noKey(n) { n = String(n == null ? '' : n).trim(); return /^\d+$/.test(n) ? String(+n) : n; }
+function stuNoOwner(no, sid) {
+  var k = noKey(no); if (!k) return null;
+  var a = allStudents();
+  for (var i = 0; i < a.length; i++) if (a[i].id !== sid && noKey(a[i].no) === k) return a[i];
+  return null;
+}
+function noFreeIn(used) {
+  var i = 1; while (used[noKey(pad2(i))] || used[String(i)]) i++;
+  used[noKey(pad2(i))] = 1; return pad2(i);
+}
+function nextNoGlobal() {
+  var used = {}; allStudents().forEach(function (x) { var k = noKey(x.no); if (k) used[k] = 1; });
+  return noFreeIn(used);
 }
 function openStudentForm(st, opts) {
   if (!S.classes.length) { UI.toast('先新建一个班级'); openClassForm(null); return; }
@@ -5416,10 +5451,10 @@ UI.act['stu-save'] = function (el) {
   if (!d.name) { $('#fName').focus(); UI.toast('请填写姓名'); return; }
   d.no = $('#fNo').value.trim(); d.note = $('#fNote').value.trim();
   var to = clsById($('#fCls').value);
-  // 重名靠学号区分：同班学号不能重复；同班有同名同学时必须填学号
+  // 学号全局唯一：不同班的学生也不能重号（同一学生跨班共用同一个学号，不算重复）
   var others = to.students.filter(function (s) { return s.id !== d.id; });
-  var noOwner = d.no ? others.filter(function (s) { return String(s.no) === d.no; })[0] : null;
-  if (noOwner) { $('#fNo').focus(); UI.toast('学号 ' + d.no + ' 已经是 ' + noOwner.name + ' 的了，换一个学号', 3000); return; }
+  var noOwner = stuNoOwner(d.no, d.id);
+  if (noOwner) { $('#fNo').focus(); UI.toast('学号 ' + d.no + ' 已经被 ' + noOwner.name + (clsOfStu(noOwner.id) ? '（' + clsOfStu(noOwner.id).name + '）' : '') + ' 用了，换一个学号', 3200); return; }
   if (!d.no && others.some(function (s) { return s.name === d.name; })) { $('#fNo').focus(); UI.toast('班里已经有一位 ' + d.name + '，填个学号把两个人区分开', 3000); return; }
   if (isHr(to.id)) hrReadForm(d);
   if (isNew) {
@@ -5618,9 +5653,9 @@ UI.act['imp-go'] = function () {
     var name = g('name').slice(0, 20); if (!name) return;
     var c = byName[g('cls').replace(/\s/g, '')] || target, no = g('no');
     if (no ? before[c.id].some(function (s) { return s.name === name && String(s.no) === no; }) : left[c.id][name] > 0) { if (!no) left[c.id][name]--; skipped++; return; }
-    if (no && c.students.some(function (s) { return String(s.no) === no; })) { no = ''; renum++; }   // 学号已经有人用了：自动换一个，不和别人撞号
+    if (no && stuNoOwner(no, '')) { no = ''; renum++; }   // 学号已经有人用了：自动换一个，不和别人撞号（全局唯一）
     var tags = g('tags') ? g('tags').split(/[、,，;；\s]+/).filter(Boolean) : [];
-    var nx = { id: uid('stu'), name: name, gender: /女|f/i.test(g('gender')) ? 'F' : 'M', no: no || nextNoIn(c), tags: tags, note: g('note'), comments: [] };
+    var nx = { id: uid('stu'), name: name, gender: /女|f/i.test(g('gender')) ? 'F' : 'M', no: no || nextNoGlobal(), tags: tags, note: g('note'), comments: [] };
     if (isHr(c.id)) {
       var bd = g('birthday').replace(/[年月\/.]/g, '-').replace(/日/g, ''), bp = bd.split('-');
       nx.birthday = bp.length === 3 && +bp[0] ? bp[0] + '-' + pad2(+bp[1]) + '-' + pad2(+bp[2]) : '';
@@ -5983,7 +6018,12 @@ UI.act['cf-save'] = function () {
   } else {
     c = { id: uid('c'), name: name, room: room, color: freeColor(), students: [], seats: {}, layout: normLayout(CF.lo), periodsId: (periodTplOf(curCls()) || {}).id };
     var list = rosterParse(($('#cfRoster') || {}).value);
-    list.forEach(function (p, i) { c.students.push({ id: uid('stu'), name: p.name.slice(0, 20), gender: p.gender, no: p.no || pad2(i + 1), tags: [], note: '', comments: [] }); });
+    var usedNo = {}; allStudents().forEach(function (x) { var k = noKey(x.no); if (k) usedNo[k] = 1; });
+    list.forEach(function (p, i) {
+      var no = p.no || pad2(i + 1);
+      if (usedNo[noKey(no)]) no = noFreeIn(usedNo); else usedNo[noKey(no)] = 1;
+      c.students.push({ id: uid('stu'), name: p.name.slice(0, 20), gender: p.gender, no: no, tags: [], note: '', comments: [] });
+    });
     S.classes.push(c);
     S.settings.cur = c.id;
     cfApplyHr(c);
