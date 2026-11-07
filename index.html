@@ -1786,7 +1786,7 @@ var ART = (function () {
 /* =========================================================
    CORE · 工具函数、存储、数据模型（多班级）、示例数据、查询与统计
    ========================================================= */
-var VERSION = '2.3.2';
+var VERSION = '2.3.3';
 var STORE_KEY = 'bzr-workbench-v2';
 /* 旧版本的数据：v1.1 班主任工作台（单个班）、任课教师工作台。第一次打开 v2.0 时自动接过来，旧数据原样保留 */
 var LEGACY_KEYS = ['bzr-workbench-v1', 'rk-workbench-v1'];
@@ -5536,8 +5536,9 @@ function renderDrawerBody(st) {
   if (Stu.tab === 'overview') {
     var cur = null, prv = null;
     for (var i = trend.length - 1; i >= 0; i--) { if (trend[i].total !== null) { if (!cur) cur = trend[i]; else { prv = trend[i]; break; } } }
-    var ch = cur && prv ? prv.crank - cur.crank : null, pts = pointsOf(st.id);
-    h += '<div class="kpis"><div class="kpi"><div class="k">' + (cur ? esc(cur.ex.name) : '最近考试') + '</div><div class="v">' + (cur ? fmtNum(cur.total, 1) : '—') + '<small>' + (cur ? '/ ' + exFull(cur.ex) : '') + '</small></div><div class="d">' + (cur ? '班内第 ' + cur.crank + ' 名 ' + (ch ? '<span class="' + (ch > 0 ? 'up' : 'dn') + '">' + (ch > 0 ? '↑' + ch : '↓' + (-ch)) + '</span>' : '') : '<span class="muted">暂无成绩</span>') + '</div></div>' +
+    var curCS = cur ? rankCS(cur.ex, st.id) : null, prvCS = prv ? rankCS(prv.ex, st.id) : null;
+    var ch = cur && prv ? ((curCS !== null && prvCS !== null) ? prvCS - curCS : prv.crank - cur.crank) : null, pts = pointsOf(st.id);
+    h += '<div class="kpis"><div class="kpi"><div class="k">' + (cur ? esc(cur.ex.name) : '最近考试') + '</div><div class="v">' + (cur ? fmtNum(cur.total, 1) : '—') + '<small>' + (cur ? '/ ' + exFull(cur.ex) : '') + '</small></div><div class="d">' + (cur ? '班内第 ' + (curCS !== null ? curCS : cur.crank) + ' 名 ' + (ch ? '<span class="' + (ch > 0 ? 'up' : 'dn') + '">' + (ch > 0 ? '↑' + ch : '↓' + (-ch)) + '</span>' : '') : '<span class="muted">暂无成绩</span>') + '</div></div>' +
       '<div class="kpi"><div class="k">' + (cur && cur.ex.cids.length > 1 ? '平行班总名次' : '得分率') + '</div><div class="v">' + (cur ? (cur.ex.cids.length > 1 ? cur.rank + '<small>/ ' + cur.n + '</small>' : pct(cur.rate)) : '—') + '</div><div class="d muted">' + (cur ? '得分率 ' + pct(cur.rate) + ' · 班均 ' + pct(cur.clsRate) : '') + '</div></div>' +
       '<div class="kpi"><div class="k">课堂积分</div><div class="v">' + (pts > 0 ? '+' : '') + pts + '</div><div class="d muted">' + S.points.filter(function (p) { return p.sid === st.id; }).length + ' 次点评</div></div></div>';
     if (trend.length) {
@@ -5562,10 +5563,10 @@ function renderDrawerBody(st) {
     else {
       h += '<div class="tbl-wrap" style="margin-top:18px"><table class="tbl"><thead><tr><th>考试</th><th class="r">成绩</th><th class="r">得分率</th><th class="r">本班平均</th><th class="r">班内名次</th>' + (multi ? '<th class="r">平行班名次</th>' : '') + '<th>分项</th></tr></thead><tbody>';
       trend.slice().reverse().forEach(function (t) {
-        var row = t.ex.scores[st.id] || {}, low = t.total !== null && t.total < thrLine(exFull(t.ex), 'pass'), cs = exStats(t.ex, c.id);
+        var row = t.ex.scores[st.id] || {}, low = t.total !== null && t.total < thrLine(exFull(t.ex), 'pass'), cs = exStats(t.ex, c.id), mcs = rankCS(t.ex, st.id);
         h += '<tr><td><b style="font-weight:600">' + esc(t.ex.name) + '</b><br><span class="muted num" style="font-size:12px">' + esc(t.ex.date) + '</span></td>' +
           '<td class="r num' + (low ? ' dn' : '') + '">' + (t.absent ? '<span class="tag amber">缺考</span>' : t.total === null ? '—' : '<b>' + fmtNum(t.total, 1) + '</b><span class="muted" style="font-size:11.5px"> /' + exFull(t.ex) + '</span>') + '</td>' +
-          '<td class="r num">' + pct(t.rate) + '</td><td class="r num">' + fmtNum(cs.avg, 1) + '</td><td class="r num">' + (t.crank ? t.crank + '<span class="muted" style="font-size:11.5px"> /' + t.cn + '</span>' : '—') + '</td>' + (multi ? '<td class="r num">' + (t.rank ? t.rank + '<span class="muted" style="font-size:11.5px"> /' + t.n + '</span>' : '—') + '</td>' : '') +
+          '<td class="r num">' + pct(t.rate) + '</td><td class="r num">' + fmtNum(cs.avg, 1) + '</td><td class="r num">' + ((mcs !== null ? mcs : t.crank) ? (mcs !== null ? mcs : t.crank) + '<span class="muted" style="font-size:11.5px"> /' + t.cn + '</span>' : '—') + '</td>' + (multi ? '<td class="r num">' + (t.rank ? t.rank + '<span class="muted" style="font-size:11.5px"> /' + t.n + '</span>' : '—') + '</td>' : '') +
           '<td class="sub" style="font-size:12px">' + (multiPart(t.ex) ? t.ex.parts.map(function (p) { var v = row[p.name]; return esc(p.name) + ' <span class="num">' + (typeof v === 'number' ? v : '—') + '</span>/' + p.full; }).join('　') : '') + '</td></tr>';
       });
       h += '</tbody></table></div><div class="muted" style="font-size:12px;margin-top:8px">红色为不及格（低于满分的 ' + S.settings.thr.pass + '%）</div>';
@@ -5756,6 +5757,13 @@ function stuSeatText(st) {
   var lay = deskLayout(c.layout, c.students.length), k = seatAssign(c, lay).of[st.id];
   return k ? seatName(k) : '未排座';
 }
+/* 手填的班级名次（成绩录入页），没填过返回 null */
+function rankCS(ex, sid) {
+  var r = ex && ex.ranks && ex.ranks[sid], v = r && r.cs;
+  if (v === undefined || v === null || v === '') return null;
+  var num = +v;
+  return isNaN(num) ? null : num;
+}
 function hrHeroHTML(st) {
   var c = clsOfStu(st.id), ag = age(st);
   return '<div class="dr-hero">' + stuAva(st, 84) + '<div style="min-width:0"><div class="dr-name">' + stuNmH(st) + (st.role ? '<span class="tag gray" style="font-size:12px">' + esc(st.role) + '</span>' : '') + '</div>' +
@@ -5772,12 +5780,14 @@ function hrDrawerTab(st, b) {
   if (tab === 'overview') {
     var cur = null, prv = null;
     for (var i = trend.length - 1; i >= 0; i--) { if (trend[i].total !== null) { if (!cur) cur = trend[i]; else { prv = trend[i]; break; } } }
-    var ch = cur && prv ? prv.rank - cur.rank : null, pts = pointsOf(st.id);
+    var curCS = cur ? rankCS(cur.ex, st.id) : null, prvCS = prv ? rankCS(prv.ex, st.id) : null;
+    var ch = cur && prv ? ((curCS !== null && prvCS !== null) ? prvCS - curCS : prv.rank - cur.rank) : null, pts = pointsOf(st.id);
     var mk = todayStr().slice(0, 7), n = { leave: 0, absent: 0, late: 0 };
     Object.keys(S.attendance).forEach(function (k) { if (k.indexOf(mk) === 0) { var v = S.attendance[k][st.id]; if (v) n[v]++; } });
     var mine = stuTrend(st.id).filter(function (t) { return t.total !== null; }).pop();
-    h += '<div class="kpis" style="grid-template-columns:repeat(5,1fr)"><div class="kpi"><div class="k">' + (cur ? esc(shortExam(cur.ex.name)) + ' 总分' : '全科总分') + '</div><div class="v">' + (cur ? fmtNum(cur.total, 1) : '—') + '<small>' + (cur ? '/ ' + hrFull(cur.ex) : '') + '</small></div><div class="d">' + (cur ? '班级第 ' + cur.rank + ' 名 ' + (ch ? '<span class="' + (ch > 0 ? 'up' : 'dn') + '">' + (ch > 0 ? '↑' + ch : '↓' + (-ch)) + '</span>' : '') : '<span class="muted">还没有全科成绩</span>') + '</div></div>' +
-      '<div class="kpi"><div class="k">' + esc(ownName()) + '</div><div class="v">' + (mine ? fmtNum(mine.total, 1) : '—') + '<small>' + (mine ? '/ ' + exFull(mine.ex) : '') + '</small></div><div class="d muted">' + (mine ? esc(shortExam(mine.ex.name)) + ' · 班内第 ' + mine.crank + ' 名' : '暂无成绩') + '</div></div>' +
+    var mineCS = mine ? rankCS(mine.ex, st.id) : null;
+    h += '<div class="kpis" style="grid-template-columns:repeat(5,1fr)"><div class="kpi"><div class="k">' + (cur ? esc(shortExam(cur.ex.name)) + ' 总分' : '全科总分') + '</div><div class="v">' + (cur ? fmtNum(cur.total, 1) : '—') + '<small>' + (cur ? '/ ' + hrFull(cur.ex) : '') + '</small></div><div class="d">' + (cur ? '班级第 ' + (curCS !== null ? curCS : cur.rank) + ' 名 ' + (ch ? '<span class="' + (ch > 0 ? 'up' : 'dn') + '">' + (ch > 0 ? '↑' + ch : '↓' + (-ch)) + '</span>' : '') : '<span class="muted">还没有全科成绩</span>') + '</div></div>' +
+      '<div class="kpi"><div class="k">' + esc(ownName()) + '</div><div class="v">' + (mine ? fmtNum(mine.total, 1) : '—') + '<small>' + (mine ? '/ ' + exFull(mine.ex) : '') + '</small></div><div class="d muted">' + (mine ? esc(shortExam(mine.ex.name)) + ' · 班内第 ' + (mineCS !== null ? mineCS : mine.crank) + ' 名' : '暂无成绩') + '</div></div>' +
       '<div class="kpi"><div class="k">本月考勤</div><div class="v">' + (n.leave + n.absent + n.late === 0 ? '全勤' : (n.leave + n.absent) + '<small>天未到</small>') + '</div><div class="d muted">请假 ' + n.leave + ' · 缺勤 ' + n.absent + ' · 迟到 ' + n.late + '</div></div>' +
       '<div class="kpi"><div class="k">课堂积分</div><div class="v">' + (pts > 0 ? '+' : '') + pts + '</div><div class="d muted">' + S.points.filter(function (p) { return p.sid === st.id; }).length + ' 次点评</div></div>' +
       '<div class="kpi"><div class="k">生日</div><div class="v" style="font-size:19px">' + (st.birthday ? fmtMD(st.birthday) : '—') + '</div><div class="d muted">' + (daysToBirthday(st) === null ? '未填写' : daysToBirthday(st) === 0 ? '就是今天' : daysToBirthday(st) + ' 天后') + '</div></div></div>';
@@ -5820,14 +5830,14 @@ function hrDrawerTab(st, b) {
       var names = []; exs.forEach(function (e) { hrSubs(e).forEach(function (s) { if (names.indexOf(s.name) < 0) names.push(s.name); }); });
       h += '<div class="tbl-wrap" style="margin-top:18px"><table class="tbl"><thead><tr><th>考试</th>' + names.map(function (s) { return '<th class="c">' + esc(s) + '</th>'; }).join('') + '<th class="c">总分</th><th class="c">班级名次</th></tr></thead><tbody>';
       exs.slice().reverse().forEach(function (e) {
-        var subs = hrSubs(e), full = isHrFull(e), rk = full ? hrRank(e).m[st.id] : rankInfo(e).m[st.id], thr = S.settings.thr.pass / 100;
+        var subs = hrSubs(e), full = isHrFull(e), rk = full ? hrRank(e).m[st.id] : rankInfo(e).m[st.id], thr = S.settings.thr.pass / 100, mcs = rankCS(e, st.id);
         h += '<tr><td><b style="font-weight:600">' + esc(e.name) + '</b><br><span class="muted num" style="font-size:12px">' + esc(e.date) + (full ? '' : ' · 只考' + esc(ownName())) + '</span></td>' + names.map(function (nm) {
           var sb = subs.filter(function (x) { return x.name === nm; })[0];
           if (!sb) return '<td class="c muted">—</td>';
           var v = hrVal(e, st.id, sb); if (v === null) return '<td class="c"><span class="tag amber">缺考</span></td>';
           if (typeof v !== 'number') return '<td class="c muted">—</td>';
           return '<td class="c num' + (v < sb.full * thr ? ' dn' : '') + '">' + fmtNum(v, 1) + '</td>';
-        }).join('') + '<td class="c num"><b>' + (rk ? fmtNum(rk.total, 1) : '—') + '</b></td><td class="c num">' + (rk ? (full ? rk.rank : rk.crank) : '—') + '</td></tr>';
+        }).join('') + '<td class="c num"><b>' + (rk ? fmtNum(rk.total, 1) : '—') + '</b></td><td class="c num">' + (mcs !== null ? mcs : (rk ? (full ? rk.rank : rk.crank) : '—')) + '</td></tr>';
       });
       h += '</tbody></table></div><div class="muted" style="font-size:12px;margin-top:8px">红色为不及格（低于满分的 ' + S.settings.thr.pass + '%）；只考' + esc(ownName()) + '的小测，名次按' + esc(ownName()) + '算</div>';
       if (trend.length > 1) h += '<div class="panel" style="margin-top:16px"><div class="panel-title">全科名次变化</div><div class="panel-sub">越靠上名次越前</div>' + drChart(function (w) {
