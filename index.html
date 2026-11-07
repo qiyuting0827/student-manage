@@ -1786,7 +1786,7 @@ var ART = (function () {
 /* =========================================================
    CORE · 工具函数、存储、数据模型（多班级）、示例数据、查询与统计
    ========================================================= */
-var VERSION = '2.1.0';
+var VERSION = '2.2.0';
 var STORE_KEY = 'bzr-workbench-v2';
 /* 旧版本的数据：v1.1 班主任工作台（单个班）、任课教师工作台。第一次打开 v2.0 时自动接过来，旧数据原样保留 */
 var LEGACY_KEYS = ['bzr-workbench-v1', 'rk-workbench-v1'];
@@ -2063,6 +2063,7 @@ function defaultState() {
       countdown: { label: '期末考试', date: '2027-01-15' },
       teacher: { name: '老师', gender: 'F', subject: '数学' },
       periods: periodsPreset('初中'), days: 5,
+      periodTpls: [], tplId: '',
       thr: { pass: 60, good: 85, low: 40 },
       reasons: deepClone(DEFAULT_REASONS),
       anim: true,
@@ -2168,6 +2169,19 @@ function migrate(s) {
       if (m.batch) m.batch.items.forEach(function (it) { if (it.st === 'run') it.st = 'wait'; });
     });
   });
+  /* 跨班型的学生：同一个 id 出现在多个班时合并成一份资料，改名/备注只维护一次 */
+  (function () {
+    var main = {};
+    s.classes.forEach(function (c) {
+      var out = [];
+      c.students.forEach(function (st) {
+        if (!st || !st.id) return;
+        if (main[st.id]) { out.push(main[st.id]); return; }
+        main[st.id] = st; out.push(st);
+      });
+      c.students = out;
+    });
+  })();
   /* 启动时按当前班绑定（或上次查看）的模板对齐 settings.periods */
   var __c = s.classes.filter(function (c) { return c.id === s.settings.cur; })[0] || s.classes[0];
   var __t = (__c && s.settings.periodTpls.filter(function (t) { return t.id === __c.periodsId; })[0]) || s.settings.periodTpls[0];
@@ -2395,7 +2409,12 @@ function sameGrid(a, b) { a = normLayout(a); b = normLayout(b); return a.per ===
 function idx() {
   if (IDX) return IDX;
   var m = {}, all = [], byName = {};
-  S.classes.forEach(function (c) { c.students.forEach(function (s) { m[s.id] = { s: s, c: c }; all.push(s); (byName[s.name] || (byName[s.name] = [])).push(s); }); });
+  S.classes.forEach(function (c) { c.students.forEach(function (s) {
+    var e = m[s.id];
+    if (e) { if (e.cs.indexOf(c) < 0) e.cs.push(c); return; }
+    m[s.id] = { s: s, c: c, cs: [c] }; all.push(s);
+    (byName[s.name] || (byName[s.name] = [])).push(s);
+  }); });
   IDX = { m: m, all: all, dup: dupTags(byName, m) };
   return IDX;
 }
@@ -2427,6 +2446,8 @@ function deskTag(s, c) {
 function allStudents() { return idx().all; }
 function stuById(id) { var x = idx().m[id]; return x ? x.s : null; }
 function clsOfStu(id) { var x = idx().m[id]; return x ? x.c : null; }
+/* 一位学生可以同时在多个班型（晚辅班、周末小班…） */
+function classesOfStu(id) { var x = idx().m[id]; return x ? x.cs.slice() : []; }
 function clsById(id) { for (var i = 0; i < S.classes.length; i++) if (S.classes[i].id === id) return S.classes[i]; return null; }
 function curCls() {
   var c = clsById(S.settings.cur);
@@ -2435,7 +2456,7 @@ function curCls() {
 }
 function byNo(a, b) { return String(a.no || '').localeCompare(String(b.no || ''), 'zh', { numeric: true }) || a.name.localeCompare(b.name, 'zh'); }
 function studentsOf(cid) { var c = clsById(cid); return c ? c.students.slice().sort(byNo) : []; }
-function studentsByNo() { var out = []; S.classes.forEach(function (c) { out = out.concat(c.students.slice().sort(byNo)); }); return out; }
+function studentsByNo() { return allStudents().slice().sort(byNo); }
 function stuClsName(sid) { var c = clsOfStu(sid); return c ? c.name : ''; }
 function pointsOf(sid) { var t = 0; S.points.forEach(function (p) { if (p.sid === sid) t += p.d; }); return t; }
 function weekNo(ds) {
@@ -2613,16 +2634,25 @@ function stuAbsent(ex, sid) {
 function rankInfo(ex) {
   if (!ex) return { rows: [], m: {}, n: 0, cn: {} };
   var key = 'rk' + ex.id; if (CACHE[key]) return CACHE[key];
-  var rows = [];
+  var rows = [], seen = {};
   ex.cids.forEach(function (cid) {
-    studentsOf(cid).forEach(function (s) { var t = stuTotal(ex, s.id); if (t !== null) rows.push({ sid: s.id, cid: cid, total: t, subs: ex.scores[s.id] || {} }); });
+    studentsOf(cid).forEach(function (s) {
+      var r = seen[s.id];
+      if (!r) r = seen[s.id] = { sid: s.id, cids: [], total: stuTotal(ex, s.id), subs: ex.scores[s.id] || {} };
+      if (r.cids.indexOf(cid) < 0) r.cids.push(cid);
+    });
   });
+  rows = Object.keys(seen).map(function (k) { return seen[k]; }).filter(function (r) { return r.total !== null; });
   rows.sort(function (a, b) { return b.total - a.total; });
   var last = null, lr = 0, m = {}, cn = {}, cl = {};
   rows.forEach(function (r, i) {
     if (r.total !== last) { lr = i + 1; last = r.total; } r.rank = lr;
-    var c = cl[r.cid] || (cl[r.cid] = { last: null, lr: 0, n: 0 });
-    if (r.total !== c.last) { c.lr = c.n + 1; c.last = r.total; } c.n++; r.crank = c.lr;
+    r.cranks = {};
+    r.cids.forEach(function (cid) {
+      var c = cl[cid] || (cl[cid] = { last: null, lr: 0, n: 0 });
+      if (r.total !== c.last) { c.lr = c.n + 1; c.last = r.total; } c.n++; r.cranks[cid] = c.lr;
+    });
+    r.crank = r.cranks[r.cids[0]];
     m[r.sid] = r;
   });
   Object.keys(cl).forEach(function (k) { cn[k] = cl[k].n; });
@@ -2633,10 +2663,12 @@ function rankInfo(ex) {
 function exStats(ex, cid) {
   var key = 'st' + ex.id + '|' + (cid || ''); if (CACHE[key]) return CACHE[key];
   var ri = rankInfo(ex), full = exFull(ex);
-  var rows = ri.rows.filter(function (r) { return !cid || r.cid === cid; });
+  var rows = ri.rows.filter(function (r) { return !cid || r.cids.indexOf(cid) >= 0; }).map(function (r) {
+    return cid && r.cranks && r.cranks[cid] !== undefined ? Object.assign({}, r, { crank: r.cranks[cid] }) : r;
+  });
   var tot = rows.map(function (r) { return r.total; });
-  var cids = cid ? [cid] : ex.cids, absent = 0, expected = 0;
-  cids.forEach(function (c) { studentsOf(c).forEach(function (s) { expected++; if (stuAbsent(ex, s.id)) absent++; }); });
+  var cids = cid ? [cid] : ex.cids, absent = 0, expected = 0, seenE = {};
+  cids.forEach(function (c) { studentsOf(c).forEach(function (s) { if (seenE[s.id]) return; seenE[s.id] = 1; expected++; if (stuAbsent(ex, s.id)) absent++; }); });
   var res = { ex: ex, cid: cid, full: full, n: rows.length, rows: rows, absent: absent, expected: expected };
   res.parts = ex.parts.map(function (p) {
     var vals = []; rows.forEach(function (r) { var v = r.subs[p.name]; if (typeof v === 'number') vals.push(v); });
@@ -2656,8 +2688,10 @@ function exStats(ex, cid) {
 }
 function entryProgress(ex, cid) {
   var n = 0, total = 0;
+  var seenP = {};
   (cid ? [cid] : ex.cids).forEach(function (c) {
     studentsOf(c).forEach(function (st) {
+      if (seenP[st.id]) return; seenP[st.id] = 1;
       total++;
       var row = ex.scores[st.id];
       if (row && ex.parts.every(function (p) { return row[p.name] !== undefined && row[p.name] !== ''; })) n++;
@@ -2669,7 +2703,7 @@ function stuTrend(sid) {
   var c = clsOfStu(sid); if (!c) return [];
   return examsSorted(c.id).map(function (ex) {
     var ri = rankInfo(ex), r = ri.m[sid], full = exFull(ex), cs = exStats(ex, c.id), gs = exStats(ex);
-    return { ex: ex, total: r ? r.total : null, rate: r ? r.total / full : null, rank: r ? r.rank : null, n: ri.n, crank: r ? r.crank : null, cn: ri.cn[c.id] || 0, clsRate: cs.rate, gradeRate: gs.rate, absent: stuAbsent(ex, sid) };
+    return { ex: ex, total: r ? r.total : null, rate: r ? r.total / full : null, rank: r ? r.rank : null, n: ri.n, crank: r ? (r.cranks && r.cranks[c.id] !== undefined ? r.cranks[c.id] : r.crank) : null, cn: ri.cn[c.id] || 0, clsRate: cs.rate, gradeRate: gs.rate, absent: stuAbsent(ex, sid) };
   });
 }
 /* 班级在平行班里的平均分名次 */
@@ -5249,8 +5283,10 @@ function stuRows(cid) {
   var info = {};
   list.forEach(function (s) {
     var c = clsOfStu(s.id), lat = latestExam(c.id), ri = lat ? rankInfo(lat) : null, r = ri && ri.m[s.id];
-    var pe = lat ? prevExam(lat, c.id) : null, pri = pe ? rankInfo(pe) : null;
-    info[s.id] = { c: c, lat: lat, r: r, ch: r && pri && pri.m[s.id] ? pri.m[s.id].crank - r.crank : null, pts: pointsOf(s.id) };
+    var pe = lat ? prevExam(lat, c.id) : null, pri = pe ? rankInfo(pe) : null, pr = pri && pri.m[s.id];
+    if (r && r.cranks && r.cranks[c.id] !== undefined) r = Object.assign({}, r, { crank: r.cranks[c.id] });
+    if (pr && pr.cranks && pr.cranks[c.id] !== undefined) pr = Object.assign({}, pr, { crank: pr.cranks[c.id] });
+    info[s.id] = { c: c, lat: lat, r: r, ch: r && pr ? pr.crank - r.crank : null, pts: pointsOf(s.id) };
   });
   var k = Stu.sort, dir = Stu.dir;
   list.sort(function (a, b) {
@@ -5266,10 +5302,10 @@ function stuRows(cid) {
 UI.register('students', {
   render: function (main, opts) {
     if (opts && opts.sec && clsById(opts.sec)) Stu.cid = opts.sec;
-    if (!clsById(Stu.cid)) Stu.cid = (curCls() || {}).id || '';
+    else Stu.cid = (curCls() || {}).id || '';
     var n = allStudents().length;
     main.innerHTML = '<div class="page scroll"><div class="page-head"><div><h1 class="page-title">学生名单</h1><div class="page-desc">' + S.classes.length + ' 个班 · 共 ' + n + ' 人 · 每个班都有完整档案（家庭、联系人、生日等）</div></div><div class="grow"></div>' +
-      '<button class="btn btn-ghost" data-act="stu-cls-edit">' + ICON.gear + '班级设置</button><button class="btn btn-light" data-act="stu-import">' + ICON.up + '批量导入</button><button class="btn btn-light" data-act="stu-export">' + ICON.down + '导出名单</button><button class="btn btn-dark" data-act="stu-add">' + ICON.userplus + '添加学生</button></div>' +
+      '<button class="btn btn-ghost" data-act="stu-cls-edit">' + ICON.gear + '班级设置</button><button class="btn btn-light" data-act="stu-join">' + ICON.userplus + '从其他班加入</button><button class="btn btn-light" data-act="stu-import">' + ICON.up + '批量导入</button><button class="btn btn-light" data-act="stu-export">' + ICON.down + '导出名单</button><button class="btn btn-dark" data-act="stu-add">' + ICON.userplus + '添加学生</button></div>' +
       '<div class="filterbar"><div class="chips" id="stuChips"></div><input class="inp" placeholder="在全部班级里搜姓名、学号、标签" value="' + esc(Stu.q) + '" data-inp="stu-q" id="stuQ" style="margin-left:auto"></div>' +
       '<div class="tbl-wrap" id="stuTbl"></div></div>';
     Stu.renderTable();
@@ -5302,6 +5338,31 @@ UI.inp['stu-q'] = function (el) { Stu.q = el.value.trim(); Stu.renderTable(); };
 UI.act['stu-cls'] = function (el) { Stu.cid = el.getAttribute('data-c'); Stu.q = ''; var q = $('#stuQ'); if (q) q.value = ''; Stu.renderTable(); };
 UI.act['stu-sort'] = function (el) { var k = el.getAttribute('data-k'); if (Stu.sort === k) Stu.dir = -Stu.dir; else { Stu.sort = k; Stu.dir = 1; } Stu.renderTable(); };
 UI.act['stu-add'] = function () { openStudentForm(null, { cid: UI.page === 'students' ? Stu.cid : (curCls() || {}).id }); };
+/* 把已经在别的班里的学生拉进当前班：同一个 id，成绩只录一次 */
+UI.act['stu-join'] = function () {
+  var to = clsById(Stu.cid) || curCls(); if (!to) return;
+  var inIds = {}; to.students.forEach(function (s) { inIds[s.id] = 1; });
+  var list = [], seen = {};
+  S.classes.forEach(function (c) {
+    if (c.id === to.id) return;
+    studentsOf(c.id).forEach(function (s) { if (inIds[s.id] || seen[s.id]) return; seen[s.id] = 1; list.push({ s: s, c: c }); });
+  });
+  if (!list.length) { UI.toast('其他班的学生都已在「' + to.name + '」里了'); return; }
+  Stu.joinTo = to.id;
+  UI.modal({ title: '从其他班加入「' + to.name + '」', body:
+    '<div class="muted" style="font-size:12.5px;margin-bottom:12px">勾选学生加入本班。同一个学生只保留一份资料，成绩录一次，两个班都能看到。</div>' +
+    '<div style="max-height:340px;overflow:auto">' + list.map(function (x) {
+      return '<label class="chk" style="display:flex;margin:0 0 7px"><input type="checkbox" class="joinSid" value="' + x.s.id + '"> <b style="font-weight:600">' + esc(x.s.name) + '</b><span class="muted" style="margin-left:8px;font-size:12px">' + esc(x.c.name) + (x.s.no ? ' · ' + esc(x.s.no) + '号' : '') + '</span></label>';
+    }).join('') + '</div>',
+    foot: '<button class="btn btn-light" data-act="modal-close">取消</button><button class="btn btn-dark" data-act="stu-join-ok">加入所选学生</button>' });
+};
+UI.act['stu-join-ok'] = function () {
+  var to = clsById(Stu.joinTo); if (!to) return;
+  var ids = []; $$('.joinSid').forEach(function (i) { if (i.checked) ids.push(i.value); });
+  if (!ids.length) { UI.toast('先勾选学生'); return; }
+  ids.forEach(function (sid) { var s = stuById(sid); if (s && !to.students.some(function (x) { return x.id === sid; })) to.students.push(s); });
+  save(); UI.closeModal(); refreshAfterChange(); UI.toast('已加入 ' + ids.length + ' 人到 ' + to.name);
+};
 UI.act['stu-edit'] = function (el, e) { e.stopPropagation(); openStudentForm(stuById(el.getAttribute('data-sid')), {}); };
 UI.act['open-stu'] = function (el) { var sp = $('#gsearchPop'); if (sp) sp.innerHTML = ''; var gi = $('#gsearch'); if (gi) gi.value = ''; UI.closeModal(); UI.closePop(); openStudent(el.getAttribute('data-sid')); };
 
@@ -5365,9 +5426,12 @@ UI.act['stu-save'] = function (el) {
     if (Stu.formSeat && Stu.formSeat.cid === to.id) { if (!to.seats) to.seats = {}; to.seats[d.id] = Stu.formSeat.key; } // 点哪个空座位加的，就坐哪
   } else {
     var from = clsOfStu(d.id), old = stuById(d.id);
-    from.students.splice(from.students.indexOf(old), 1);
-    if (from !== to && from.seats) delete from.seats[d.id];
-    to.students.push(d);
+    if (old && old !== d) Object.keys(d).forEach(function (k) { old[k] = d[k]; });
+    if (from !== to) {
+      from.students = from.students.filter(function (x) { return x.id !== d.id; });
+      if (from.seats) delete from.seats[d.id];
+    }
+    if (!to.students.some(function (x) { return x.id === d.id; })) to.students.push(old || d);
   }
   save();
   var more = isNew && $('#fMore') && $('#fMore').checked;
@@ -5380,10 +5444,10 @@ UI.act['stu-save'] = function (el) {
 };
 UI.act['stu-del'] = function (el) {
   var st = stuById(el.getAttribute('data-sid')); if (!st) return;
-  UI.confirm('删除学生', '确定删除「' + stuNmH(st) + '」吗？TA 的成绩和课堂点评也会一起删除，无法恢复。', '删除', function () {
-    var c = clsOfStu(st.id);
-    c.students = c.students.filter(function (s) { return s.id !== st.id; });
-    if (c.seats) delete c.seats[st.id];
+  var cs = classesOfStu(st.id);
+  var where = cs.length > 1 ? 'TA 同时在 ' + cs.map(function (x) { return x.name; }).join('、') + '，会从这些班一起移除。' : '';
+  UI.confirm('删除学生', '确定删除「' + stuNmH(st) + '」吗？' + where + 'TA 的成绩和课堂点评也会一起删除，无法恢复。', '删除', function () {
+    cs.forEach(function (c) { c.students = c.students.filter(function (s) { return s.id !== st.id; }); if (c.seats) delete c.seats[st.id]; });
     S.points = S.points.filter(function (p) { return p.sid !== st.id; });
     S.exams.forEach(function (e) { delete e.scores[st.id]; });
     S.hw.forEach(function (h) { delete h.st[st.id]; });
@@ -7716,7 +7780,7 @@ function renderSetBody() {
       '<div class="k">上次备份</div><div>' + (st.lastBackup ? fmtTime(st.lastBackup) : '<span class="dn">还没有备份过</span>') + '</div>' +
       '<div class="k">存储状态</div><div>' + (Store.ok() ? '正常' : '<span class="dn">浏览器禁止了本地存储，关闭页面后数据会丢失，请及时导出备份</span>') + '</div></div>' +
       '<div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn btn-dark" data-act="backup">' + ICON.down + '导出备份</button><label class="btn btn-light" style="cursor:pointer">' + ICON.up + '从备份恢复<input type="file" accept=".json" hidden data-chg="restore"></label></div></div>' +
-      '<div class="panel set-sec"><div class="panel-title">重新开始</div><div class="panel-sub">以下操作会覆盖当前数据，建议先导出备份</div><div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn btn-light" data-act="load-demo">载入示例数据</button><button class="btn btn-light" data-act="exam-clear" style="color:var(--red)">' + ICON.trash + '删除全部考试</button><button class="btn btn-light" data-act="wipe" style="color:var(--red)">' + ICON.trash + '清空全部数据</button></div></div>';
+      '<div class="panel set-sec"><div class="panel-title">重新开始</div><div class="panel-sub">以下操作会覆盖当前数据，建议先导出备份</div><div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn btn-light" data-act="exam-clear" style="color:var(--red)">' + ICON.trash + '删除全部考试</button><button class="btn btn-light" data-act="wipe" style="color:var(--red)">' + ICON.trash + '清空全部数据</button></div></div>';
   } else if (SetP.sec === 'about') {
     h += '<div class="panel set-sec"><div style="display:flex;gap:14px;align-items:center">' + brandMark().replace('class="brand-mark"', 'class="brand-mark" style="width:52px;height:52px"') + '<div><div style="font-size:18px;font-weight:700">乐智托管</div><div class="muted" style="font-size:13px">个人工作台系列 · 第 1 期 · v' + VERSION + '</div></div></div>' +
       '<div style="font-size:13.5px;line-height:1.9;color:var(--ink2);margin-top:14px">给独立教师用：每个班都有课表与调课、教学进度、学生档案、考勤、全科成绩、成绩分析、班级课表，班与班之间可以横向对比。外加可接入任意大模型的 AI 助手。所有数据都留在你自己的电脑上。<br>开源版只做 PC 端；手机端和更多职业版本会陆续推出。</div>' +
@@ -7870,12 +7934,6 @@ UI.chg['restore'] = function (el) {
   rd.readAsText(f, 'utf-8');
   el.value = '';
 };
-UI.act['load-demo'] = function () {
-  UI.confirm('载入示例数据', '会用示例数据（3 个班；课表、进度、全科成绩、考勤）覆盖当前数据，保留你的形象和 AI 设置。', '载入', function () {
-    var keep = { teacher: S.settings.teacher, ai: S.settings.ai };
-    S = demoState(); S.settings.teacher = keep.teacher; S.settings.ai = keep.ai; save(true); Cls.entered = {}; UI.shell(); UI.go('class');
-  }, true);
-};
 UI.act['wipe'] = function () {
   UI.confirm('清空全部数据', '班级、学生、档案、课表、成绩、考勤、点评、AI 对话都会被删除，无法恢复。确定吗？', '清空', function () {
     var keep = { teacher: S.settings.teacher, ai: S.settings.ai };
@@ -7894,7 +7952,7 @@ UI.act['exam-clear'] = function () {
 /* =========================================================
    启动 · 首次欢迎页（选择形象、填学科和班级）→ 进入工作台
    ========================================================= */
-var Welcome = { g: 'F', mode: 'demo', per: 2 };
+var Welcome = { g: 'F', mode: 'blank', per: 2 };
 function showWelcome() {
   var el = document.createElement('div'); el.className = 'welcome'; el.id = 'welcome';
   el.innerHTML = '<div class="welcome-in">' +
@@ -7902,8 +7960,7 @@ function showWelcome() {
     '<h1>你好，我是你的乐智托管</h1><p class="lead">先选一个你的形象，它会站在每个班的讲台上</p>' +
     '<div class="w-avatars">' + ['F', 'M'].map(function (g) { return '<button class="' + (Welcome.g === g ? 'on' : '') + '" data-act="w-g" data-g="' + g + '"><span class="circle">' + ART.teacherAvatar({ gender: g }, 96, false) + '</span>' + (g === 'F' ? '女老师' : '男老师') + '</button>'; }).join('') + '</div>' +
     '<div class="w-form"><div class="field"><label>怎么称呼你</label><input class="inp" id="wName" placeholder="如：李老师" value="' + (Welcome.g === 'F' ? '李老师' : '王老师') + '"></div><div class="field"><label>任教学科</label><input class="inp" id="wSub" placeholder="如：数学" value="数学"></div></div>' +
-    '<div class="w-mode"><button class="' + (Welcome.mode === 'demo' ? 'on' : '') + '" data-act="w-mode" data-m="demo"><b>先看看示例数据</b>3 个班：课表、全科成绩、考勤，随时可以清空</button><button class="' + (Welcome.mode === 'blank' ? 'on' : '') + '" data-act="w-mode" data-m="blank"><b>直接用我的班级</b>填上你的班，再导入学生、排课表</button></div>' +
-    '<div id="wBlank" class="' + (Welcome.mode === 'blank' ? '' : 'hide') + '" style="max-width:440px;margin:-12px auto 22px;text-align:left"><div class="field"><label>我教的班级</label><input class="inp" id="wClass" placeholder="多个班用顿号隔开，如：初二（3）班、初二（5）班"><label class="chk" style="margin-top:8px;display:none"><input type="checkbox" id="wHr" checked></label></div><div class="row2"><div class="field"><label>学段</label><select class="sel" id="wStage"><option>小学</option><option selected>初中</option><option>高中</option></select></div><div class="field"><label>课桌</label><div class="seg light" id="wPer">' + DESK_PER.map(function (d) { return '<button type="button" class="' + (Welcome.per === d[0] ? 'on' : '') + '" data-act="w-per" data-v="' + d[0] + '">' + d[1] + '</button>'; }).join('') + '</div></div></div></div>' +
+    '<div id="wBlank" style="max-width:440px;margin:8px auto 22px;text-align:left"><div class="field"><label>我教的班级</label><input class="inp" id="wClass" placeholder="多个班用顿号隔开，如：初二（3）班、初二（5）班"><label class="chk" style="margin-top:8px;display:none"><input type="checkbox" id="wHr" checked></label></div><div class="row2"><div class="field"><label>学段</label><select class="sel" id="wStage"><option>小学</option><option selected>初中</option><option>高中</option></select></div><div class="field"><label>课桌</label><div class="seg light" id="wPer">' + DESK_PER.map(function (d) { return '<button type="button" class="' + (Welcome.per === d[0] ? 'on' : '') + '" data-act="w-per" data-v="' + d[0] + '">' + d[1] + '</button>'; }).join('') + '</div></div></div></div>' +
     '<button class="btn btn-dark w-go" data-act="w-go">开启工作台</button>' +
     '<div class="w-restore">升级了新版本、换了电脑？<label>' + ICON.up + '从备份恢复<input type="file" accept=".json" hidden data-chg="restore"></label>，选之前导出的备份文件，数据就都回来了</div>' +
     '<div class="muted" style="font-size:12px;margin-top:16px">' + ICON.lock.replace('width="14" height="14"', 'width="12" height="12" style="display:inline;vertical-align:-1px"') + ' 所有数据只保存在这台电脑的浏览器里</div><div class="sign" style="padding-top:28px">Developed by @赛博老爸</div></div>';
@@ -7922,21 +7979,17 @@ UI.act['w-mode'] = function (el) {
 };
 UI.act['w-go'] = function () {
   var name = $('#wName').value.trim() || '老师', sub = $('#wSub').value.trim();
-  if (Welcome.mode === 'demo') {
-    S = demoState();
-    S.settings.teacher = { name: name, gender: Welcome.g, subject: sub || '数学' };
-  } else {
-    var names = splitNames($('#wClass').value);
-    if (!names.length) { $('#wClass').focus(); UI.toast('请至少填一个班级'); return; }
-    var stg = $('#wStage').value;
-    S = defaultState();
-    S.settings.stage = stg; S.settings.periods = periodsPreset(stg);
-    S.settings.teacher = { name: name, gender: Welcome.g, subject: sub };
-    S.classes = names.map(function (n, i) { return { id: uid('c'), name: n.slice(0, 20), room: '', color: i % CLASS_COLORS.length, students: [], layout: normLayout({ per: Welcome.per }) }; });
-    S.settings.cur = S.classes[0].id;
-    S.settings.subjects = subjectsPreset(stg);
-    if ($('#wHr') && $('#wHr').checked) S.settings.hr = S.classes[0].id;
-  }
+  var names = splitNames($('#wClass').value);
+  if (!names.length) { $('#wClass').focus(); UI.toast('请至少填一个班级'); return; }
+  var stg = $('#wStage').value;
+  S = defaultState();
+  S.settings.stage = stg; S.settings.periods = periodsPreset(stg);
+  S.settings.teacher = { name: name, gender: Welcome.g, subject: sub };
+  S.classes = names.map(function (n, i) { return { id: uid('c'), name: n.slice(0, 20), room: '', color: i % CLASS_COLORS.length, students: [], layout: normLayout({ per: Welcome.per }) }; });
+  S.settings.cur = S.classes[0].id;
+  S.settings.subjects = subjectsPreset(stg);
+  if ($('#wHr') && $('#wHr').checked) S.settings.hr = S.classes[0].id;
+  S = migrate(S);
   S.settings.onboarded = true;
   save(true);
   var w = $('#welcome'); w.style.transition = 'opacity .3s'; w.style.opacity = '0'; setTimeout(function () { w.remove(); }, 300);
