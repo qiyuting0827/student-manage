@@ -1821,7 +1821,7 @@ var ART = (function () {
 /* =========================================================
    CORE · 工具函数、存储、数据模型（多班级）、示例数据、查询与统计
    ========================================================= */
-var VERSION = '2.4.1';
+var VERSION = '2.4.2';
 var STORE_KEY = 'bzr-workbench-v2';
 /* 旧版本的数据：v1.1 班主任工作台（单个班）、任课教师工作台。第一次打开 v2.0 时自动接过来，旧数据原样保留 */
 var LEGACY_KEYS = ['bzr-workbench-v1', 'rk-workbench-v1'];
@@ -2656,10 +2656,16 @@ function prevExam(ex, cid) {
 function exFull(ex) { return sum(ex.parts.map(function (p) { return p.full; })); }
 function multiPart(ex) { return ex.parts.length > 1; }
 function thrLine(full, k) { return full * S.settings.thr[k] / 100; }
+/* 本版修改：分数兼容数字字符串（旧备份可能是 "120"） */
+function scoreNum(v) {
+  if (typeof v === 'number') return isNaN(v) ? undefined : v;
+  if (typeof v === 'string' && v.trim() !== '') { var n = +v; return isNaN(n) ? undefined : n; }
+  return undefined;
+}
 function stuTotal(ex, sid) {
   var row = ex.scores[sid]; if (!row) return null;
   var t = 0, n = 0;
-  ex.parts.forEach(function (p) { var v = row[p.name]; if (typeof v === 'number') { t += v; n++; } });
+  ex.parts.forEach(function (p) { var v = scoreNum(row[p.name]); if (v !== undefined) { t += v; n++; } });
   return n ? t : null;
 }
 function stuAbsent(ex, sid) {
@@ -2814,7 +2820,7 @@ function hrTotalOf(ex, sid) {
   var t = 0, n = 0;
   hrSubs(ex).forEach(function (s) {
     var w = subWeight(s.name); if (!(w > 0)) return;
-    var v = hrVal(ex, sid, s); if (typeof v === 'number') { t += v * w; n++; }
+    var v = scoreNum(hrVal(ex, sid, s)); if (v !== undefined) { t += v * w; n++; } /* 本版修改：兼容字符串分数 */
   });
   return n ? round1(t) : null;
 }
@@ -2833,10 +2839,12 @@ function hrMulti(ex) { return hrSubs(ex).length >= 2; }
 function hrLatest() { var e = hrFullExams().filter(hrMulti); for (var i = e.length - 1; i >= 0; i--) if (hrStats(e[i]).n) return e[i]; return null; }
 function hrPrev(ex) { var e = hrFullExams().filter(hrMulti); for (var i = e.indexOf(ex) - 1; i >= 0; i--) if (hrStats(e[i]).n) return e[i]; return null; }
 /* 班主任班全科名次 */
-function hrRank(ex) {
+function hrRank(ex, cid) {
   if (!ex) return { rows: [], m: {}, n: 0 };
-  var key = 'hr' + (curCls() || {}).id + ex.id; if (CACHE[key]) return CACHE[key];
-  var c = hrCls(), rows = [];
+  /* 本版修改：可以指定班级（成绩录入页用 Sc.cid），不传时仍按当前班 */
+  var c = cid ? clsById(cid) : hrCls();
+  var key = 'hr' + (c || {}).id + ex.id; if (CACHE[key]) return CACHE[key];
+  var rows = [];
   if (c) studentsOf(c.id).forEach(function (s) { var t = hrTotalOf(ex, s.id); if (t !== null) rows.push({ sid: s.id, total: t, subs: hrRow(ex, s.id) }); });
   rows.sort(function (a, b) { return b.total - a.total; });
   var last = null, lr = 0, m = {};
@@ -6210,7 +6218,7 @@ function bindGrid(el) {
 }
 /* 班主任班：我教的科目（可分项）+ 其他科目 + 全科总分和名次 */
 function hrGridHTML(ex, many) {
-  var multi = multiPart(ex), own = exOwn(ex), subs = hrSubs(ex).filter(function (x) { return !x.own; }), hr = hrRank(ex), oi = rankInfo(ex);
+  var multi = multiPart(ex), own = exOwn(ex), subs = hrSubs(ex).filter(function (x) { return !x.own; }), hr = hrRank(ex, Sc.cid), oi = rankInfo(ex); /* 本版修改：按 Sc.cid 算全科总分 */
   var h = '<div class="paste-hint">' + ICON.flag + '<span>这个班要录所有科目：' + (own ? esc(ownName()) + (multi ? '按分项录' : '') + '和' : '') + '其他 ' + subs.length + ' 科放在一张表里。从 Excel 复制一整块（按学号顺序、科目顺序和这里一样）点起始格子 <span class="kbd">Ctrl</span> + <span class="kbd">V</span> 就能填好。缺考填「缺」。</span></div>' +
     '<div class="tbl-wrap" style="max-height:calc(100vh - ' + (many ? 300 : 250) + 'px)"><table class="tbl grid-tbl" data-mode="hr"><thead><tr><th>学号</th><th>姓名</th>';
   var cols = [];
@@ -6266,7 +6274,7 @@ function onCellInput(e) {
 }
 Sc.refreshTotals = function () {
   reindex();
-  var ex = examById(Sc.exam), ri = rankInfo(ex), hr = hrRank(ex);
+  var ex = examById(Sc.exam), ri = rankInfo(ex), hr = hrRank(ex, Sc.cid); /* 本版修改：按 Sc.cid 算全科总分 */
   $$('#scGrid [data-htot]').forEach(function (td) { var r = hr.m[td.getAttribute('data-htot')]; td.textContent = r ? fmtNum(r.total, 1) : ''; });
   $$('#scGrid [data-hrk]').forEach(function (td) { var r = hr.m[td.getAttribute('data-hrk')]; td.textContent = r ? r.rank : ''; });
   $$('#scGrid [data-otot]').forEach(function (td) { var r = ri.m[td.getAttribute('data-otot')]; td.textContent = r ? fmtNum(r.total, 1) : ''; });
@@ -6419,14 +6427,14 @@ UI.act['exam-del'] = function (el) {
   }, true);
 };
 UI.act['score-export'] = function (el) {
-  var ex = examById(el.getAttribute('data-id')), ri = rankInfo(ex), multi = multiPart(ex), full = isHrFull(ex), own = exOwn(ex), hr = hrRank(ex);
+  var ex = examById(el.getAttribute('data-id')), ri = rankInfo(ex), multi = multiPart(ex), full = isHrFull(ex), own = exOwn(ex);
   var others = full ? hrSubs(ex).filter(function (x) { return !x.own; }) : [];
   function cell(v) { return v === null ? '缺考' : (v === undefined ? '' : v); }
   var rows = [['班级', '学号', '姓名'].concat(own && multi ? ex.parts.map(function (p) { return p.name; }) : []).concat(own ? [ownName()] : []).concat(['班级名次', '级部排名', '区排名', '备注']).concat(others.map(function (x) { return x.name; })).concat(full ? ['全科总分'] : [])];
   ex.cids.forEach(function (cid) {
     var c = clsById(cid); if (!c) return;
     studentsOf(cid).forEach(function (st) {
-      var row = ex.scores[st.id] || {}, r = ri.m[st.id], h = isHr(cid) ? hr.m[st.id] : null;
+      var row = ex.scores[st.id] || {}, r = ri.m[st.id], h = isHr(cid) ? hrRank(ex, cid).m[st.id] : null; /* 本版修改：每个班用自己的全科总分 */
       rows.push([c.name, st.no, st.name].concat(own && multi ? ex.parts.map(function (p) { return cell(row[p.name]); }) : []).concat(own ? [r ? r.total : (stuAbsent(ex, st.id) ? '缺考' : '')] : []).concat([rankVal(ex, st.id, 'cs'), rankVal(ex, st.id, 'gr'), rankVal(ex, st.id, 'ds'), rankVal(ex, st.id, 'nt')])
         .concat(others.map(function (x) { return isHr(cid) ? cell(hrVal(ex, st.id, x)) : ''; })).concat(full ? [h ? h.total : ''] : []));
     });

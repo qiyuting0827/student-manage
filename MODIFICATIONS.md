@@ -177,3 +177,9 @@
 - `<head>` 增加 manifest、apple-touch-icon、theme-color；`viewport` 保持 `viewport-fit=cover`。
 - `</script>` 前注册 Service Worker（仅 https / localhost）：页面导航网络优先、静态资源缓存优先，装到 iPad 主屏后可离线打开。
 - 新增 `部署到公网.md`：GitHub Pages / Vercel / Cloudflare Pages 的发布步骤与 iPad 添加到主屏幕说明。
+
+## 2026-11-07 · 修复成绩录入切班后部分学生总分空白（v2.4.2）
+
+- 原因：成绩录入页顶部切到别的班时，全科总分仍按侧栏"当前班"取学生，只在该班的学生算不出总分（多个班有共享学生时表现最明显）。
+- `hrRank(ex, cid)` 增加可选班级参数，缓存键按班级区分；录入表、实时刷新、导出都按正在查看的班计算。
+- 新增 `scoreNum(v)`：总分计算同时接受数字与字符串分数（兼容旧备份）。
