@@ -997,6 +997,71 @@ body.has-guard .welcome { top: var(--gb-h, 40px); }
   .kpis { margin: 12px 0 10px; }
 }
 
+/* ===== 本版修改：iPhone 竖屏（≤560px）改底部标签栏，适配 iPhone 11 / 安全区 ===== */
+@media (max-width: 560px) {
+  :root { --side-w: 0px; }
+  .app, .app.with-rail { grid-template-columns: 1fr; grid-template-rows: minmax(0, 1fr); }
+  .side {
+    position: fixed; left: 0; right: 0; bottom: 0; top: auto; z-index: 72;
+    flex-direction: row; align-items: stretch; gap: 0;
+    padding: 4px 4px calc(4px + env(safe-area-inset-bottom));
+    border-right: 0; border-top: 1px solid var(--line);
+    background: rgba(255, 255, 255, .97);
+    overflow-x: auto; overflow-y: hidden; -webkit-overflow-scrolling: touch;
+  }
+  .side::-webkit-scrollbar { display: none; }
+  .brand, .search, .nav-label, .recent, .me, .sign, .side-demo { display: none !important; }
+  .nav { display: flex; flex: 1 1 auto; gap: 0; }
+  .side-foot { margin: 0; padding: 0; display: flex; flex: none; }
+  .nav a, .nav button {
+    flex: 1 1 0; width: auto; min-width: 46px; height: 50px;
+    flex-direction: column; justify-content: center; gap: 3px;
+    padding: 0 2px; border-radius: 10px; font-size: 10px; line-height: 1; text-align: center;
+  }
+  .nav a span.t { display: block !important; font-size: 10px; white-space: nowrap; }
+  .nav .cnt { display: none; }
+  .nav a .ico { width: 22px; height: 22px; }
+  .nav a .ico svg { width: 20px; height: 20px; }
+  .page { padding: 14px 14px calc(80px + env(safe-area-inset-bottom)); overflow-x: hidden; }
+  .page-head { gap: 8px; margin-bottom: 14px; }
+  .page-title { font-size: 18px; }
+  .page-desc { font-size: 12.5px; }
+  .kpis, .small-mult { grid-template-columns: repeat(2, 1fr); gap: 8px; }
+  .kpi .v { font-size: 21px; }
+  .drawer { width: 100vw; }
+  .drawer .kpis { grid-template-columns: repeat(2, 1fr) !important; }
+  .drawer-body { padding: 0 14px calc(96px + env(safe-area-inset-bottom)); }
+  .dr-hero { padding: 18px 14px 14px; }
+  .dr-tools { right: 34px; top: 12px; max-width: 150px; }
+  .drawer .tabs { margin: 0 14px; }
+  .modal, .modal.wide { width: calc(100vw - 16px); max-height: calc(100dvh - 24px); }
+  .modal-foot { padding-bottom: calc(12px + env(safe-area-inset-bottom)); }
+  .modal-body { padding: 12px 14px 8px; }
+  .tbl-wrap { -webkit-overflow-scrolling: touch; }
+  .tbl th, .tbl td { padding-left: 8px; padding-right: 8px; }
+  .dock { bottom: calc(74px + env(safe-area-inset-bottom)); }
+  .top-tools { right: 8px; top: 8px; gap: 4px; }
+  .fs-global { display: none; }
+  .cls-bar { max-width: calc(100% - 90px); }
+  .welcome { padding: 20px 16px calc(24px + env(safe-area-inset-bottom)); }
+  .welcome h1 { font-size: 20px; }
+  .welcome-in { max-width: 100%; }
+  .btn { min-height: 38px; }
+  .btn-sm, .btn-xs { min-height: 32px; }
+  .tabs button { height: 44px; }
+  .score-layout, .grid2, .set-layout { grid-template-columns: 1fr; }
+  .score-layout > *, .grid2 > *, .an-grid > *, .set-layout > *, .panel, .exam-list { min-width: 0; }
+  .exam-item { overflow: hidden; }
+  .exam-item .t { flex-wrap: wrap; }
+  .an-strip { flex-wrap: wrap; }
+  .an-card { flex: 1 1 45%; }
+  .an-scope { grid-template-columns: 1fr; }
+  .small-mult > *, .sm-cell { min-width: 0; }
+  .filterbar { flex-wrap: wrap; }
+  .filterbar .inp { width: 100%; margin-left: 0 !important; }
+ 
+}
+
 </style>
 </head>
 <body>
@@ -1821,7 +1886,7 @@ var ART = (function () {
 /* =========================================================
    CORE · 工具函数、存储、数据模型（多班级）、示例数据、查询与统计
    ========================================================= */
-var VERSION = '2.4.2';
+var VERSION = '2.5.0';
 var STORE_KEY = 'bzr-workbench-v2';
 /* 旧版本的数据：v1.1 班主任工作台（单个班）、任课教师工作台。第一次打开 v2.0 时自动接过来，旧数据原样保留 */
 var LEGACY_KEYS = ['bzr-workbench-v1', 'rk-workbench-v1'];
