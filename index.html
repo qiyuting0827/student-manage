@@ -1901,7 +1901,7 @@ var ART = (function () {
 /* =========================================================
    CORE · 工具函数、存储、数据模型（多班级）、示例数据、查询与统计
    ========================================================= */
-var VERSION = '2.6.1';
+var VERSION = '2.6.2';
 var STORE_KEY = 'bzr-workbench-v2';
 /* 旧版本的数据：v1.1 班主任工作台（单个班）、任课教师工作台。第一次打开 v2.0 时自动接过来，旧数据原样保留 */
 var LEGACY_KEYS = ['bzr-workbench-v1', 'rk-workbench-v1'];
@@ -5654,20 +5654,9 @@ function hrDrawerTab(st, b) {
     var mine = stuTrend(st.id).filter(function (t) { return t.total !== null; }).pop();
     var mineCS = mine ? rankCS(mine.ex, st.id) : null;
     h += '<div class="kpis" style="grid-template-columns:repeat(4,1fr)"><div class="kpi"><div class="k">' + (cur ? esc(shortExam(cur.ex.name)) + ' 总分' : '全科总分') + '</div><div class="v">' + (cur ? fmtNum(cur.total, 1) : '—') + '<small>' + (cur ? '/ ' + hrFull(cur.ex) : '') + '</small></div><div class="d">' + (cur ? ((curCS !== null ? '班级第 ' + curCS + ' 名' : '班级名次未录入') + ' · ' + (curGR !== null ? '级部第 ' + curGR + ' 名' : '级部名次未录入')) + (ch ? ' <span class="' + (ch > 0 ? 'up' : 'dn') + '">' + (ch > 0 ? '↑' + ch : '↓' + (-ch)) + '</span>' : '') : '<span class="muted">还没有全科成绩</span>') + '</div></div>' +
-      
       '<div class="kpi"><div class="k">本月考勤</div><div class="v">' + (n.leave + n.absent + n.late === 0 ? '全勤' : (n.leave + n.absent) + '<small>天未到</small>') + '</div><div class="d muted">请假 ' + n.leave + ' · 缺勤 ' + n.absent + ' · 迟到 ' + n.late + '</div></div>' +
       '<div class="kpi"><div class="k">课堂积分</div><div class="v">' + (pts > 0 ? '+' : '') + pts + '</div><div class="d muted">' + S.points.filter(function (p) { return p.sid === st.id; }).length + ' 次点评</div></div>' +
       '<div class="kpi"><div class="k">生日</div><div class="v" style="font-size:19px">' + (st.birthday ? fmtMD(st.birthday) : '—') + '</div><div class="d muted">' + (daysToBirthday(st) === null ? '未填写' : daysToBirthday(st) === 0 ? '就是今天' : daysToBirthday(st) + ' 天后') + '</div></div></div>';
-    if (trend.length) {
-      var le = cur ? cur.ex : trend[trend.length - 1].ex;
-      h += '<div class="grid2"><div class="panel"><div class="panel-title">总分得分率</div><div class="panel-sub">全科 · 和班级平均对比</div>' + drChart(function (w) {
-        return CH.lines([{ name: st.name, color: CH.C.s1, values: trend.map(function (t) { return t.rate === null ? null : t.rate * 100; }) }, { name: '班级平均', color: CH.C.base, values: trend.map(function (t) { return t.clsRate === undefined ? null : t.clsRate * 100; }), width: 1.6, dot: 3 }], trend.map(function (t) { return shortExam(t.ex.name); }), w, { h: 210, min: 30, max: 100, fmt: function (v) { return Math.round(v) + '%'; }, tipFmt: function (v) { return round1(v) + '%'; } });
-      }) + '<div class="legend"><span><i style="background:' + CH.C.s1 + '"></i>' + stuNmH(st) + '</span><span><i style="background:' + CH.C.base + '"></i>班级平均</span></div></div>';
-      h += '<div class="panel"><div class="panel-title">学科画像</div><div class="panel-sub">' + esc(le.name) + ' 各科得分率</div>' + drChart(function (w) {
-        var subs = hrSubs(le), st2 = hrStats(le);
-        return CH.radar(subs.map(function (s) { return s.name; }), [{ name: '班级平均', color: CH.C.base, values: st2.subs.map(function (x) { return x.rate || 0; }), fill: false }, { name: st.name, color: CH.C.s1, values: subs.map(function (s) { var v = hrVal(le, st.id, s); return typeof v === 'number' ? v / s.full : 0; }) }], w, { h: 210 });
-      }) + '<div class="legend"><span><i style="background:' + CH.C.s1 + '"></i>' + stuNmH(st) + '</span><span><i style="background:' + CH.C.base + '"></i>班级平均</span></div></div></div>';
-    }
     h += '<div class="panel" style="margin-top:16px"><div class="info-grid">' +
       '<div class="k">学习情况</div><div>' + (esc(st.study) || '<span class="muted">未填写</span>') + '</div>' +
       '<div class="k">性格特长</div><div>' + (esc(st.personality) || '<span class="muted">未填写</span>') + '</div>' +
