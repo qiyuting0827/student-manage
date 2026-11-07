@@ -966,6 +966,11 @@ body.has-guard .welcome { top: var(--gb-h, 40px); }
   .grid2 { grid-template-columns: 1fr; }
   .set-layout { grid-template-columns: 1fr; }
   .set-nav { position: static; flex-direction: row; flex-wrap: wrap; }
+  /* 班级栏与右上角工具按钮分两行，避免互相遮挡（iPad / 手机） */
+  .class-page .top-tools { top: 12px; left: auto; max-width: calc(100% - 24px); flex-wrap: nowrap; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  .class-page .top-tools::-webkit-scrollbar { display: none; }
+  .class-page .cls-bar { top: 58px; left: 20px; right: 20px; max-width: none !important; flex-wrap: nowrap; }
+  .class-page .cls-bar .cls-seg { flex: 1 1 auto; min-width: 0; }
 }
 @media (max-width: 900px) {
   :root { --side-w: 68px; }
@@ -996,6 +1001,11 @@ body.has-guard .welcome { top: var(--gb-h, 40px); }
   .page-head { margin-bottom: 14px; }
   .kpis { margin: 12px 0 10px; }
 }
+
+.stu-photo { border-radius: 50%; object-fit: cover; background: #f3f3f2; display: inline-block; vertical-align: middle; }
+.ava-edit { display: flex; gap: 14px; align-items: center; margin: 0 0 16px; }
+.ava-prev { flex: none; }
+.ava-prev .ava { border-radius: 50%; display: block; }
 
 /* ===== 本版修改：iPhone 竖屏（≤560px）改底部标签栏，适配 iPhone 11 / 安全区 ===== */
 @media (max-width: 560px) {
@@ -1058,6 +1068,11 @@ body.has-guard .welcome { top: var(--gb-h, 40px); }
   .an-scope { grid-template-columns: 1fr; }
   .small-mult > *, .sm-cell { min-width: 0; }
   .filterbar { flex-wrap: wrap; }
+  /* 班级页：顶部工具按钮与班级栏分成两行，避免互相遮挡 */
+  .class-page .top-tools { top: 8px; right: 8px; left: auto; max-width: calc(100% - 16px); flex-wrap: nowrap; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  .class-page .top-tools::-webkit-scrollbar { display: none; }
+  .class-page .cls-bar { top: 52px; left: 8px; right: 8px; max-width: none !important; flex-wrap: nowrap; }
+  .class-page .cls-bar .cls-seg { flex: 1 1 auto; min-width: 0; }
   .filterbar .inp { width: 100%; margin-left: 0 !important; }
  
 }
@@ -1886,7 +1901,7 @@ var ART = (function () {
 /* =========================================================
    CORE · 工具函数、存储、数据模型（多班级）、示例数据、查询与统计
    ========================================================= */
-var VERSION = '2.5.0';
+var VERSION = '2.5.1';
 var STORE_KEY = 'bzr-workbench-v2';
 /* 旧版本的数据：v1.1 班主任工作台（单个班）、任课教师工作台。第一次打开 v2.0 时自动接过来，旧数据原样保留 */
 var LEGACY_KEYS = ['bzr-workbench-v1', 'rk-workbench-v1'];
@@ -3469,7 +3484,28 @@ function aiAvatar(size) {
     '<ellipse cx="-4" cy="-1" rx="2.6" ry="3.1" fill="#171717"/><ellipse cx="4" cy="-1" rx="2.6" ry="3.1" fill="#171717"/>' +
     '<path d="M-10 10 Q0 15 10 10 L11 15 Q0 20 -11 15 Z" fill="#2f7ff0"/></svg>';
 }
-function stuAva(st, size) { return ART.avatar(st, size, { color: stuColor(st) }); }
+function stuAva(st, size) {
+  /* 本版修改：学生可以上传真实照片当头像 */
+  if (st && st.photo) return '<img class="ava stu-photo" src="' + st.photo + '" width="' + size + '" height="' + size + '" alt="" style="width:' + size + 'px;height:' + size + 'px" draggable="false">';
+  return ART.avatar(st, size, { color: stuColor(st) });
+}
+/* 把选中的图片缩到 200px 以内，压成 JPEG，避免把本地存储撑满 */
+function stuPhotoPick(file, cb) {
+  var rd = new FileReader();
+  rd.onload = function () {
+    var img = new Image();
+    img.onload = function () {
+      var max = 200, r = Math.min(1, max / Math.max(img.width, img.height));
+      var cv = document.createElement('canvas');
+      cv.width = Math.max(1, Math.round(img.width * r)); cv.height = Math.max(1, Math.round(img.height * r));
+      cv.getContext('2d').drawImage(img, 0, 0, cv.width, cv.height);
+      cb(cv.toDataURL('image/jpeg', 0.82));
+    };
+    img.onerror = function () { cb(null); };
+    img.src = rd.result;
+  };
+  rd.readAsDataURL(file);
+}
 function brandSub() { var c = curCls(); return c ? c.name : (S.settings.teacher.subject || '任课') + ' · ' + S.classes.length + ' 个班'; }
 function meSub() { var t = S.settings.teacher; return (t.subject || '') + '老师 · ' + S.classes.length + ' 个班'; }
 
@@ -5521,7 +5557,11 @@ function openStudentForm(st, opts) {
   var d = st ? deepClone(st) : { id: uid('stu'), name: '', gender: 'M', no: nextNoGlobal(), tags: [], note: '', comments: [] };
   var hrOn = isHr(c0.id), tagPool = STU_TAGS.concat(HR_TAGS);
   Stu.form = d; Stu.formSeat = isNew && opts.seat ? { cid: c0.id, key: opts.seat } : null;
-  var body = '<div class="row3"><div class="field"><label>姓名<span class="req">*</span></label><input class="inp" id="fName" value="' + esc(d.name) + '" autofocus maxlength="20" data-inp="f-name"></div>' +
+  var avaBox = '<div class="ava-edit"><div class="ava-prev" id="fAvaPrev">' + stuAva(d, 64) + '</div><div>' +
+    '<label class="btn btn-light btn-sm" style="cursor:pointer">' + ICON.up + '上传照片<input type="file" accept="image/*" hidden data-chg="stu-photo"></label>' +
+    '<button type="button" class="btn btn-ghost btn-sm' + (d.photo ? '' : ' hide') + '" id="fAvaDel" data-act="stu-photo-del">移除</button>' +
+    '<div class="muted" style="font-size:11.5px;margin-top:4px">选一张正面照，名单和档案里都会显示（会自动压缩）</div></div></div>';
+  var body = avaBox + '<div class="row3"><div class="field"><label>姓名<span class="req">*</span></label><input class="inp" id="fName" value="' + esc(d.name) + '" autofocus maxlength="20" data-inp="f-name"></div>' +
     '<div class="field"><label>性别</label><div class="seg light" id="fGender"><button type="button" class="' + (d.gender !== 'F' ? 'on' : '') + '" data-act="f-gender" data-g="M">男生</button><button type="button" class="' + (d.gender === 'F' ? 'on' : '') + '" data-act="f-gender" data-g="F">女生</button></div></div>' +
     '<div class="field"><label>学号</label><input class="inp num" id="fNo" value="' + esc(d.no) + '" data-inp="f-name"></div></div><div class="dup-hint hide" id="fDupHint"></div>' +
     '<div class="field"><label>班级</label><select class="sel" id="fCls" data-chg="f-cls">' + S.classes.map(function (c) { return '<option value="' + c.id + '"' + (c === c0 ? ' selected' : '') + '>' + esc(c.name) + '</option>'; }).join('') + '</select>' + '' + '</div>' +
@@ -5536,6 +5576,24 @@ function openStudentForm(st, opts) {
   });
   dupHintUpdate();
 }
+UI.chg['stu-photo'] = function (el) {
+  var f = el.files && el.files[0]; el.value = '';
+  if (!f) return;
+  if (!/^image\//.test(f.type)) { UI.toast('请选择图片文件'); return; }
+  stuPhotoPick(f, function (url) {
+    if (!url) { UI.toast('这张图片读不出来，换一张试试'); return; }
+    Stu.form.photo = url;
+    var p = $('#fAvaPrev'); if (p) p.innerHTML = stuAva(Stu.form, 64);
+    var del = $('#fAvaDel'); if (del) del.classList.remove('hide');
+    UI.toast('照片已添加（约 ' + Math.round(url.length / 1024) + ' KB）', 1800);
+  });
+};
+UI.act['stu-photo-del'] = function () {
+  if (!Stu.form) return;
+  delete Stu.form.photo;
+  var p = $('#fAvaPrev'); if (p) p.innerHTML = stuAva(Stu.form, 64);
+  var del = $('#fAvaDel'); if (del) del.classList.add('hide');
+};
 UI.act['f-gender'] = function (el) { Stu.form.gender = el.getAttribute('data-g'); $$('#fGender button').forEach(function (b) { b.classList.toggle('on', b === el); }); };
 UI.act['f-tag'] = function (el) {
   var t = el.getAttribute('data-t'), a = Stu.form.tags, i = a.indexOf(t);
