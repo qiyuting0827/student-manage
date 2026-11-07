@@ -1901,7 +1901,7 @@ var ART = (function () {
 /* =========================================================
    CORE · 工具函数、存储、数据模型（多班级）、示例数据、查询与统计
    ========================================================= */
-var VERSION = '2.5.1';
+var VERSION = '2.5.2';
 var STORE_KEY = 'bzr-workbench-v2';
 /* 旧版本的数据：v1.1 班主任工作台（单个班）、任课教师工作台。第一次打开 v2.0 时自动接过来，旧数据原样保留 */
 var LEGACY_KEYS = ['bzr-workbench-v1', 'rk-workbench-v1'];
@@ -5694,8 +5694,8 @@ function renderDrawerBody(st) {
     var cur = null, prv = null;
     for (var i = trend.length - 1; i >= 0; i--) { if (trend[i].total !== null) { if (!cur) cur = trend[i]; else { prv = trend[i]; break; } } }
     var curCS = cur ? rankCS(cur.ex, st.id) : null, prvCS = prv ? rankCS(prv.ex, st.id) : null;
-    var ch = cur && prv ? ((curCS !== null && prvCS !== null) ? prvCS - curCS : prv.crank - cur.crank) : null, pts = pointsOf(st.id);
-    h += '<div class="kpis"><div class="kpi"><div class="k">' + (cur ? esc(cur.ex.name) : '最近考试') + '</div><div class="v">' + (cur ? fmtNum(cur.total, 1) : '—') + '<small>' + (cur ? '/ ' + exFull(cur.ex) : '') + '</small></div><div class="d">' + (cur ? '班内第 ' + (curCS !== null ? curCS : cur.crank) + ' 名 ' + (ch ? '<span class="' + (ch > 0 ? 'up' : 'dn') + '">' + (ch > 0 ? '↑' + ch : '↓' + (-ch)) + '</span>' : '') : '<span class="muted">暂无成绩</span>') + '</div></div>' +
+    var ch = cur && prv && curCS !== null && prvCS !== null ? prvCS - curCS : null, pts = pointsOf(st.id);
+    h += '<div class="kpis"><div class="kpi"><div class="k">' + (cur ? esc(cur.ex.name) : '最近考试') + '</div><div class="v">' + (cur ? fmtNum(cur.total, 1) : '—') + '<small>' + (cur ? '/ ' + exFull(cur.ex) : '') + '</small></div><div class="d">' + (cur ? (curCS !== null ? '班内第 ' + curCS + ' 名 ' : '班内名次未录入 ') + (ch ? '<span class="' + (ch > 0 ? 'up' : 'dn') + '">' + (ch > 0 ? '↑' + ch : '↓' + (-ch)) + '</span>' : '') : '<span class="muted">暂无成绩</span>') + '</div></div>' +
       '<div class="kpi"><div class="k">' + (cur && cur.ex.cids.length > 1 ? '平行班总名次' : '得分率') + '</div><div class="v">' + (cur ? (cur.ex.cids.length > 1 ? cur.rank + '<small>/ ' + cur.n + '</small>' : pct(cur.rate)) : '—') + '</div><div class="d muted">' + (cur ? '得分率 ' + pct(cur.rate) + ' · 班均 ' + pct(cur.clsRate) : '') + '</div></div>' +
       '<div class="kpi"><div class="k">课堂积分</div><div class="v">' + (pts > 0 ? '+' : '') + pts + '</div><div class="d muted">' + S.points.filter(function (p) { return p.sid === st.id; }).length + ' 次点评</div></div></div>';
     if (trend.length) {
@@ -5711,7 +5711,7 @@ function renderDrawerBody(st) {
           var me = le.parts.map(function (p) { var v = row[p.name]; return typeof v === 'number' ? v / p.full * 100 : 0; });
           return CH.groupBars(le.parts.map(function (p) { return p.name; }), [{ name: st.name, color: CH.C.s1, values: me }, { name: '本班平均', color: '#c9c8c2', values: cs.parts.map(function (p) { return (p.rate || 0) * 100; }) }], w, { h: 210, max: 100, ref: S.settings.thr.pass, fmt: function (v) { return Math.round(v) + '%'; } });
         }) + '<div class="legend"><span><i class="sq" style="background:' + CH.C.s1 + '"></i>' + stuNmH(st) + '</span><span><i class="sq" style="background:#c9c8c2"></i>本班平均</span></div></div></div>';
-      } else h += '<div class="panel"><div class="panel-title">班内名次变化</div><div class="panel-sub">越靠上名次越前</div>' + rankChart(trend) + '</div></div>';
+      } else h += '<div class="panel"><div class="panel-title">班内名次变化</div><div class="panel-sub">按成绩录入里手填的班级名次</div>' + rankChart(trend, st.id) + '</div></div>';
     }
     h += '<div class="panel" style="margin-top:16px"><div class="info-grid"><div class="k">老师备注</div><div>' + (esc(st.note) || '<span class="muted">还没写。点右上角「编辑」可以补充学习习惯、薄弱点等</span>') + '</div>' +
       '<div class="k">标签</div><div>' + ((st.tags || []).length ? st.tags.map(function (t) { return '<span class="tag" style="margin-right:4px">' + esc(t) + '</span>'; }).join('') : '<span class="muted">—</span>') + '</div></div></div>';
@@ -5723,11 +5723,11 @@ function renderDrawerBody(st) {
         var row = t.ex.scores[st.id] || {}, low = t.total !== null && t.total < thrLine(exFull(t.ex), 'pass'), cs = exStats(t.ex, c.id), mcs = rankCS(t.ex, st.id);
         h += '<tr><td><b style="font-weight:600">' + esc(t.ex.name) + '</b><br><span class="muted num" style="font-size:12px">' + esc(t.ex.date) + '</span></td>' +
           '<td class="r num' + (low ? ' dn' : '') + '">' + (t.absent ? '<span class="tag amber">缺考</span>' : t.total === null ? '—' : '<b>' + fmtNum(t.total, 1) + '</b><span class="muted" style="font-size:11.5px"> /' + exFull(t.ex) + '</span>') + '</td>' +
-          '<td class="r num">' + pct(t.rate) + '</td><td class="r num">' + fmtNum(cs.avg, 1) + '</td><td class="r num">' + ((mcs !== null ? mcs : t.crank) ? (mcs !== null ? mcs : t.crank) + '<span class="muted" style="font-size:11.5px"> /' + t.cn + '</span>' : '—') + '</td>' + (multi ? '<td class="r num">' + (t.rank ? t.rank + '<span class="muted" style="font-size:11.5px"> /' + t.n + '</span>' : '—') + '</td>' : '') +
+          '<td class="r num">' + pct(t.rate) + '</td><td class="r num">' + fmtNum(cs.avg, 1) + '</td><td class="r num">' + (mcs !== null ? mcs + '<span class="muted" style="font-size:11.5px"> /' + t.cn + '</span>' : '—') + '</td>' + (multi ? '<td class="r num">' + (t.rank ? t.rank + '<span class="muted" style="font-size:11.5px"> /' + t.n + '</span>' : '—') + '</td>' : '') +
           '<td class="sub" style="font-size:12px">' + (multiPart(t.ex) ? t.ex.parts.map(function (p) { var v = row[p.name]; return esc(p.name) + ' <span class="num">' + (typeof v === 'number' ? v : '—') + '</span>/' + p.full; }).join('　') : '') + '</td></tr>';
       });
       h += '</tbody></table></div><div class="muted" style="font-size:12px;margin-top:8px">红色为不及格（低于满分的 ' + S.settings.thr.pass + '%）</div>';
-      h += '<div class="panel" style="margin-top:16px"><div class="panel-title">班内名次变化</div><div class="panel-sub">越靠上名次越前</div>' + rankChart(trend) + '</div>';
+      h += '<div class="panel" style="margin-top:16px"><div class="panel-title">班内名次变化</div><div class="panel-sub">按成绩录入里手填的班级名次</div>' + rankChart(trend, st.id) + '</div>';
     }
   } else if (Stu.tab === 'points') {
     var pts2 = S.points.filter(function (p) { return p.sid === st.id; });
@@ -5744,10 +5744,13 @@ function renderDrawerBody(st) {
   b.innerHTML = h;
   Stu.dch.forEach(function (x) { var el = document.getElementById(x.id); if (el) el.innerHTML = x.fn(Math.max(240, el.clientWidth)); });
 }
-function rankChart(trend) {
+function rankChart(trend, sid) {
+  var vals = trend.map(function (t) { return sid ? rankCS(t.ex, sid) : null; });
+  var has = vals.some(function (v) { return v !== null; });
+  if (!has) return '<div class="empty">还没有填写班级名次。到「成绩录入」页的「班级名次」一列填上，这里就会显示变化</div>';
   return drChart(function (w) {
-    var n = Math.max.apply(null, trend.map(function (t) { return t.cn || 1; }).concat([2]));
-    return CH.lines([{ name: '班内名次', color: CH.C.s1, values: trend.map(function (t) { return t.crank === null ? null : n - t.crank + 1; }) }], trend.map(function (t) { return shortExam(t.ex.name); }), w, { h: 200, min: 1, max: n, fmt: function (v) { return '第' + Math.round(n - v + 1); }, tipFmt: function (v) { return '第 ' + Math.round(n - v + 1) + ' 名'; } });
+    var n = Math.max.apply(null, vals.filter(function (v) { return v !== null; }).concat([2]));
+    return CH.lines([{ name: '班级名次', color: CH.C.s1, values: vals.map(function (v) { return v === null ? null : n - v + 1; }) }], trend.map(function (t) { return shortExam(t.ex.name); }), w, { h: 200, min: 1, max: n, fmt: function (v) { return '第' + Math.round(n - v + 1); }, tipFmt: function (v) { return '第 ' + Math.round(n - v + 1) + ' 名'; } });
   });
 }
 UI.act['pt-del'] = function (el) { S.points = S.points.filter(function (p) { return p.id !== el.getAttribute('data-id'); }); save(); openStudent(el.getAttribute('data-sid'), 'points'); if (UI.page === 'class') { drawScene(); Cls.renderRail(); } };
@@ -5938,13 +5941,13 @@ function hrDrawerTab(st, b) {
     var cur = null, prv = null;
     for (var i = trend.length - 1; i >= 0; i--) { if (trend[i].total !== null) { if (!cur) cur = trend[i]; else { prv = trend[i]; break; } } }
     var curCS = cur ? rankCS(cur.ex, st.id) : null, prvCS = prv ? rankCS(prv.ex, st.id) : null;
-    var ch = cur && prv ? ((curCS !== null && prvCS !== null) ? prvCS - curCS : prv.rank - cur.rank) : null, pts = pointsOf(st.id);
+    var ch = cur && prv && curCS !== null && prvCS !== null ? prvCS - curCS : null, pts = pointsOf(st.id);
     var mk = todayStr().slice(0, 7), n = { leave: 0, absent: 0, late: 0 };
     Object.keys(S.attendance).forEach(function (k) { if (k.indexOf(mk) === 0) { var v = S.attendance[k][st.id]; if (v) n[v]++; } });
     var mine = stuTrend(st.id).filter(function (t) { return t.total !== null; }).pop();
     var mineCS = mine ? rankCS(mine.ex, st.id) : null;
-    h += '<div class="kpis" style="grid-template-columns:repeat(5,1fr)"><div class="kpi"><div class="k">' + (cur ? esc(shortExam(cur.ex.name)) + ' 总分' : '全科总分') + '</div><div class="v">' + (cur ? fmtNum(cur.total, 1) : '—') + '<small>' + (cur ? '/ ' + hrFull(cur.ex) : '') + '</small></div><div class="d">' + (cur ? '班级第 ' + (curCS !== null ? curCS : cur.rank) + ' 名 ' + (ch ? '<span class="' + (ch > 0 ? 'up' : 'dn') + '">' + (ch > 0 ? '↑' + ch : '↓' + (-ch)) + '</span>' : '') : '<span class="muted">还没有全科成绩</span>') + '</div></div>' +
-      '<div class="kpi"><div class="k">' + esc(ownName()) + '</div><div class="v">' + (mine ? fmtNum(mine.total, 1) : '—') + '<small>' + (mine ? '/ ' + exFull(mine.ex) : '') + '</small></div><div class="d muted">' + (mine ? esc(shortExam(mine.ex.name)) + ' · 班内第 ' + (mineCS !== null ? mineCS : mine.crank) + ' 名' : '暂无成绩') + '</div></div>' +
+    h += '<div class="kpis" style="grid-template-columns:repeat(5,1fr)"><div class="kpi"><div class="k">' + (cur ? esc(shortExam(cur.ex.name)) + ' 总分' : '全科总分') + '</div><div class="v">' + (cur ? fmtNum(cur.total, 1) : '—') + '<small>' + (cur ? '/ ' + hrFull(cur.ex) : '') + '</small></div><div class="d">' + (cur ? (curCS !== null ? '班级第 ' + curCS + ' 名 ' : '班级名次未录入 ') + (ch ? '<span class="' + (ch > 0 ? 'up' : 'dn') + '">' + (ch > 0 ? '↑' + ch : '↓' + (-ch)) + '</span>' : '') : '<span class="muted">还没有全科成绩</span>') + '</div></div>' +
+      '<div class="kpi"><div class="k">' + esc(ownName()) + '</div><div class="v">' + (mine ? fmtNum(mine.total, 1) : '—') + '<small>' + (mine ? '/ ' + exFull(mine.ex) : '') + '</small></div><div class="d muted">' + (mine ? esc(shortExam(mine.ex.name)) + (mineCS !== null ? ' · 班内第 ' + mineCS + ' 名' : ' · 名次未录入') : '暂无成绩') + '</div></div>' +
       '<div class="kpi"><div class="k">本月考勤</div><div class="v">' + (n.leave + n.absent + n.late === 0 ? '全勤' : (n.leave + n.absent) + '<small>天未到</small>') + '</div><div class="d muted">请假 ' + n.leave + ' · 缺勤 ' + n.absent + ' · 迟到 ' + n.late + '</div></div>' +
       '<div class="kpi"><div class="k">课堂积分</div><div class="v">' + (pts > 0 ? '+' : '') + pts + '</div><div class="d muted">' + S.points.filter(function (p) { return p.sid === st.id; }).length + ' 次点评</div></div>' +
       '<div class="kpi"><div class="k">生日</div><div class="v" style="font-size:19px">' + (st.birthday ? fmtMD(st.birthday) : '—') + '</div><div class="d muted">' + (daysToBirthday(st) === null ? '未填写' : daysToBirthday(st) === 0 ? '就是今天' : daysToBirthday(st) + ' 天后') + '</div></div></div>';
@@ -5994,13 +5997,17 @@ function hrDrawerTab(st, b) {
           var v = hrVal(e, st.id, sb); if (v === null) return '<td class="c"><span class="tag amber">缺考</span></td>';
           if (typeof v !== 'number') return '<td class="c muted">—</td>';
           return '<td class="c num' + (v < sb.full * thr ? ' dn' : '') + '">' + fmtNum(v, 1) + '</td>';
-        }).join('') + '<td class="c num"><b>' + (rk ? fmtNum(rk.total, 1) : '—') + '</b></td><td class="c num">' + (mcs !== null ? mcs : (rk ? (full ? rk.rank : rk.crank) : '—')) + '</td></tr>';
+        }).join('') + '<td class="c num"><b>' + (rk ? fmtNum(rk.total, 1) : '—') + '</b></td><td class="c num">' + (mcs !== null ? mcs : '—') + '</td></tr>';
       });
       h += '</tbody></table></div><div class="muted" style="font-size:12px;margin-top:8px">红色为不及格（低于满分的 ' + S.settings.thr.pass + '%）；只考' + esc(ownName()) + '的小测，名次按' + esc(ownName()) + '算</div>';
-      if (trend.length > 1) h += '<div class="panel" style="margin-top:16px"><div class="panel-title">全科名次变化</div><div class="panel-sub">越靠上名次越前</div>' + drChart(function (w) {
-        var n = Math.max.apply(null, trend.map(function (t) { return t.n || 1; }).concat([2]));
-        return CH.lines([{ name: '名次', color: CH.C.s1, values: trend.map(function (t) { return t.rank === null ? null : n - t.rank + 1; }) }], trend.map(function (t) { return shortExam(t.ex.name); }), w, { h: 200, min: 1, max: n, fmt: function (v) { return '第' + Math.round(n - v + 1); }, tipFmt: function (v) { return '第 ' + Math.round(n - v + 1) + ' 名'; } });
-      }) + '</div>';
+      if (trend.length > 1) {
+        var csv = trend.map(function (t) { return rankCS(t.ex, st.id); });
+        var hasCS = csv.some(function (v) { return v !== null; });
+        h += '<div class="panel" style="margin-top:16px"><div class="panel-title">全科名次变化</div><div class="panel-sub">按成绩录入里手填的班级名次</div>' + (hasCS ? drChart(function (w) {
+          var n2 = Math.max.apply(null, csv.filter(function (v) { return v !== null; }).concat([2]));
+          return CH.lines([{ name: '班级名次', color: CH.C.s1, values: csv.map(function (v) { return v === null ? null : n2 - v + 1; }) }], trend.map(function (t) { return shortExam(t.ex.name); }), w, { h: 200, min: 1, max: n2, fmt: function (v) { return '第' + Math.round(n2 - v + 1); }, tipFmt: function (v) { return '第 ' + Math.round(n2 - v + 1) + ' 名'; } });
+        }) : '<div class="empty">还没有填写班级名次。到「成绩录入」页的「班级名次」一列填上，这里就会显示变化</div>') + '</div>';
+      }
     }
   } else if (tab === 'records') {
     h += '<div class="panel" style="margin-top:18px"><div class="panel-title" style="margin-bottom:12px">新增记录</div><div class="row3" style="grid-template-columns:120px 150px 1fr"><div class="field"><label>类型</label><select class="sel" id="recType">' + RECORD_TYPES.map(function (t) { return '<option>' + t + '</option>'; }).join('') + '</select></div>' +
