@@ -7716,7 +7716,7 @@ function renderSetBody() {
       '<div class="k">上次备份</div><div>' + (st.lastBackup ? fmtTime(st.lastBackup) : '<span class="dn">还没有备份过</span>') + '</div>' +
       '<div class="k">存储状态</div><div>' + (Store.ok() ? '正常' : '<span class="dn">浏览器禁止了本地存储，关闭页面后数据会丢失，请及时导出备份</span>') + '</div></div>' +
       '<div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn btn-dark" data-act="backup">' + ICON.down + '导出备份</button><label class="btn btn-light" style="cursor:pointer">' + ICON.up + '从备份恢复<input type="file" accept=".json" hidden data-chg="restore"></label></div></div>' +
-      '<div class="panel set-sec"><div class="panel-title">重新开始</div><div class="panel-sub">以下操作会覆盖当前数据，建议先导出备份</div><div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn btn-light" data-act="load-demo">载入示例数据</button><button class="btn btn-light" data-act="wipe" style="color:var(--red)">' + ICON.trash + '清空全部数据</button></div></div>';
+      '<div class="panel set-sec"><div class="panel-title">重新开始</div><div class="panel-sub">以下操作会覆盖当前数据，建议先导出备份</div><div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn btn-light" data-act="load-demo">载入示例数据</button><button class="btn btn-light" data-act="exam-clear" style="color:var(--red)">' + ICON.trash + '删除全部考试</button><button class="btn btn-light" data-act="wipe" style="color:var(--red)">' + ICON.trash + '清空全部数据</button></div></div>';
   } else if (SetP.sec === 'about') {
     h += '<div class="panel set-sec"><div style="display:flex;gap:14px;align-items:center">' + brandMark().replace('class="brand-mark"', 'class="brand-mark" style="width:52px;height:52px"') + '<div><div style="font-size:18px;font-weight:700">乐智托管</div><div class="muted" style="font-size:13px">个人工作台系列 · 第 1 期 · v' + VERSION + '</div></div></div>' +
       '<div style="font-size:13.5px;line-height:1.9;color:var(--ink2);margin-top:14px">给独立教师用：每个班都有课表与调课、教学进度、学生档案、考勤、全科成绩、成绩分析、班级课表，班与班之间可以横向对比。外加可接入任意大模型的 AI 助手。所有数据都留在你自己的电脑上。<br>开源版只做 PC 端；手机端和更多职业版本会陆续推出。</div>' +
@@ -7880,6 +7880,14 @@ UI.act['wipe'] = function () {
   UI.confirm('清空全部数据', '班级、学生、档案、课表、成绩、考勤、点评、AI 对话都会被删除，无法恢复。确定吗？', '清空', function () {
     var keep = { teacher: S.settings.teacher, ai: S.settings.ai };
     S = defaultState(); S.settings.teacher = keep.teacher; S.settings.ai = keep.ai; S.settings.onboarded = true; save(true); UI.shell(); UI.go('settings', { sec: 'classes' }); UI.toast('已清空，先添加任教班级');
+  }, true);
+};
+UI.act['exam-clear'] = function () {
+  var n = S.exams.length;
+  if (!n) { UI.toast('现在没有考试记录'); return; }
+  UI.confirm('删除全部考试', '会把 ' + n + ' 场考试和对应的全部分数一起删除，学生、班级、考勤、点评都不受影响。确定吗？', '全部删除', function () {
+    S.exams = []; Sc.exam = null; save(); UI.toast('已删除 ' + n + ' 场考试');
+    if (UI.page === 'scores' || UI.page === 'analysis') UI.go('scores');
   }, true);
 };
 
