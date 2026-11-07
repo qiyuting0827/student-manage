@@ -170,3 +170,10 @@
 3. **随机点名改为全屏大字**
    - 点名时整屏显示学生姓名（`clamp(72px, 15vw, 240px)`），下方学号/标签与「回答得好 +1」「再抽一个」按钮，右上角可关闭。
    - 抽选动画期间姓名在大屏上快速滚动，结束后定格并保留座位高亮与老师指认动画。
+
+## 2026-11-07 · 支持装成 App / 公网部署（v2.4.1）
+
+- 新增 `manifest.webmanifest`、`sw.js`、`icon-192.png`、`icon-512.png`、`apple-touch-icon.png`、`.nojekyll`。
+- `<head>` 增加 manifest、apple-touch-icon、theme-color；`viewport` 保持 `viewport-fit=cover`。
+- `</script>` 前注册 Service Worker（仅 https / localhost）：页面导航网络优先、静态资源缓存优先，装到 iPad 主屏后可离线打开。
+- 新增 `部署到公网.md`：GitHub Pages / Vercel / Cloudflare Pages 的发布步骤与 iPad 添加到主屏幕说明。
