@@ -2,7 +2,10 @@
 <html lang="zh-CN">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="format-detection" content="telephone=no">
 <title>乐智托管</title>
 <meta name="description" content="乐智托管 v2.0 · 个人工作台系列第 1 期：每个班的学生档案、考勤、全科成绩、班级课表，加上课表、教学进度和单科成绩分析，以及 AI 助手。单文件，数据只存在本机。">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='-24 -24 48 48'%3E%3Crect x='-24' y='-24' width='48' height='48' rx='13' fill='%23171717'/%3E%3Ccircle cx='0' cy='-2' r='11' fill='%23fff'/%3E%3Cellipse cx='-4' cy='-2' rx='2.6' ry='3.1' fill='%23171717'/%3E%3Cellipse cx='4' cy='-2' rx='2.6' ry='3.1' fill='%23171717'/%3E%3Cpath d='M-10 9 Q0 14 10 9 L11 14 Q0 19 -11 14 Z' fill='%23e5483b'/%3E%3C/svg%3E">
@@ -277,6 +280,15 @@ svg.ava { border-radius: 50%; overflow: hidden; }
 .pick-card { position: absolute; left: 50%; top: 64px; transform: translateX(-50%); z-index: 8; background: #fff; border-radius: 18px; box-shadow: var(--sh-pop); padding: 14px 22px 14px 14px; display: flex; align-items: center; gap: 14px; animation: pop .25s ease-out; }
 .pick-card .nm { font-size: 26px; font-weight: 800; letter-spacing: 2px; line-height: 1.1; }
 .pick-card .ava { border-radius: 50%; }
+/* 本版修改：随机点名全屏大字（教室后排也能看清） */
+.pick-full { position: fixed; inset: 0; z-index: 60; display: flex; align-items: center; justify-content: center; background: rgba(252, 252, 250, .97); animation: pop .22s ease-out; }
+.pf-inner { width: 100%; padding: 40px 24px; text-align: center; }
+.pf-k { font-size: 14px; letter-spacing: .35em; color: var(--ink3); text-indent: .35em; }
+.pf-name { font-size: clamp(72px, 15vw, 240px); font-weight: 900; line-height: 1.08; letter-spacing: .04em; color: var(--ink); margin: 10px 0 14px; word-break: break-all; }
+.pf-sub { font-size: clamp(15px, 1.9vw, 22px); color: var(--ink2); min-height: 26px; }
+.pf-ops { margin-top: clamp(28px, 6vh, 56px); display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
+.pf-ops .btn { min-height: 48px; font-size: 16px; padding: 0 24px; }
+.pf-x { position: absolute; top: 16px; right: 20px; z-index: 2; }
 
 /* 右侧栏 */
 .rail-sec { padding: 0 0 18px; margin-bottom: 18px; border-bottom: 1px solid var(--line); }
@@ -926,6 +938,62 @@ small.dupno { display: inline-block; margin-left: 4px; padding: 0 5px; height: 1
 body.has-guard #app { top: var(--gb-h, 40px); }
 body.has-guard .welcome { top: var(--gb-h, 40px); }
 
+/* ===== 本版修改：iPad / 触屏适配（iPad Air 3：834×1112 / 1112×834） ===== */
+@media (pointer: coarse) {
+  * { -webkit-tap-highlight-color: transparent; }
+  /* 触屏没有 hover，把只在悬停时出现的小按钮常显 */
+  .tbl .ops, .todo .x, .tl-item .del { opacity: 1; }
+  /* iOS 聚焦小于 16px 的输入框会自动放大页面 */
+  .inp, .sel, .ta, .grid-tbl input, .rk-in { font-size: 16px; }
+  .inp, .sel { height: 36px; }
+  .nav a { min-height: 44px; }
+  .tabs button { height: 46px; }
+  .btn { min-height: 34px; }
+  .btn-xs, .btn-sm { min-height: 28px; }
+  /* 教室拖拽座位时不让页面跟着滚 */
+  .stage { touch-action: none; }
+}
+@media (max-width: 1120px) {
+  :root { --side-w: 180px; }
+  .app.with-rail { grid-template-columns: var(--side-w) 1fr; }
+  .page { padding: 20px 20px 36px; }
+  .drawer { width: min(760px, 92vw); }
+  .top-tools { right: 100px; }
+  .score-layout { grid-template-columns: 1fr; }
+  .grid2 { grid-template-columns: 1fr; }
+  .set-layout { grid-template-columns: 1fr; }
+  .set-nav { position: static; flex-direction: row; flex-wrap: wrap; }
+}
+@media (max-width: 900px) {
+  :root { --side-w: 68px; }
+  .page { padding: 16px 16px 32px; }
+  .page-head { gap: 10px; margin-bottom: 16px; }
+  .kpis, .small-mult { grid-template-columns: repeat(2, 1fr); }
+  .drawer { width: 100vw; }
+  .drawer .kpis { grid-template-columns: repeat(2, 1fr) !important; }
+  .drawer-body { padding: 0 16px 28px; }
+  .dr-hero { padding: 18px 16px 14px; gap: 14px; }
+  .dr-hero > div:first-child { flex: none; }
+  .dr-tools { right: 12px; top: 14px; max-width: 210px; flex-wrap: wrap; justify-content: flex-end; }
+  .tabs { margin: 0 16px; gap: 16px; overflow-x: auto; scrollbar-width: none; }
+  .tabs::-webkit-scrollbar { display: none; }
+  .tabs button { white-space: nowrap; }
+  .modal, .modal.wide { width: calc(100vw - 24px); max-height: calc(100dvh - 32px); }
+  .modal-head { padding: 16px 16px 6px; }
+  .modal-body { padding: 12px 16px 8px; }
+  .modal-foot { padding: 10px 16px 16px; }
+  .cls-bar { max-width: calc(100% - 132px); }
+  .filterbar .inp { width: 100%; }
+  .dock { bottom: calc(14px + env(safe-area-inset-bottom)); }
+  .page, .scroll, .tbl-wrap, .modal-body, .rail { -webkit-overflow-scrolling: touch; }
+}
+/* 横屏且高度不高（iPad 横放）：收紧纵向留白 */
+@media (max-height: 860px) and (min-width: 901px) {
+  .page { padding-top: 18px; padding-bottom: 28px; }
+  .page-head { margin-bottom: 14px; }
+  .kpis { margin: 12px 0 10px; }
+}
+
 </style>
 </head>
 <body>
@@ -1300,53 +1368,17 @@ var ART = (function () {
     s += rect(0, 10, W, 1, 0, '#e4e4e2');
     s += rect(0, L.FRONT - 8, W, 8, 0, '#e6e6e4');
     s += rect(0, L.FRONT - 8, W, 1, 0, '#dcdcda');
-    var BW = Math.min(800, L.gridW + 40), BH = 106, bx = (W - BW) / 2, by = 28;
-    var SW = 292;
-    var pw = (BW - SW - 16) / 2;
+    /* 本版修改：去掉左右两块小黑板（今日课程 / 今日事项），只保留中间智慧屏 */
+    var BH = 106, SW = Math.min(430, Math.max(300, Math.round(L.gridW * 0.52))), BW = SW, bx = (W - BW) / 2, by = 28;
     // 黑板阴影
     s += rect(bx - 4, by + 4, BW + 8, BH + 10, 6, '#000', { 'fill-opacity': '.10', filter: 'url(#fxShadowS)' });
     s += rect(bx - 6, by - 6, BW + 12, BH + 12, 5, '#dcdddf');
     s += rect(bx - 6, by - 6, BW + 12, 2, 1, '#eeeeef');
-    // 左板
-    s += rect(bx, by, pw, BH, 2, 'url(#gChalk)');
-    // 右板
-    s += rect(bx + BW - pw, by, pw, BH, 2, 'url(#gChalk)');
     // 智慧屏
-    var sx = bx + pw + 8;
+    var sx = bx;
     s += rect(sx, by - 2, SW, BH + 4, 4, '#141414');
     s += rect(sx + 5, by + 3, SW - 10, BH - 6, 2, 'url(#gScreen)');
     s += rect(sx + 5, by + 3, SW - 10, (BH - 6) * 0.45, 2, '#fff', { opacity: '.06' });
-    // 黑板内容
-    var chalk = 'font-family="Kaiti SC, STKaiti, KaiTi, 楷体, serif" fill="#f1f1ec"';
-    s += '<g class="board-left' + (b.leftAct ? ' board-act' : '') + '" ' + chalk + (b.leftAct ? ' data-sact="' + b.leftAct + '"' : '') + '>';
-    if (b.leftAct) s += rect(bx, by, pw, BH, 2, 'transparent', { 'class': 'board-hit' });
-    s += txt(bx + 16, by + 24, escx(b.leftTitle || '今日课程'), { 'font-size': 14, opacity: '.95' });
-    if (b.leftItems && b.leftItems.length) {
-      // 今日课程：两列，按节次从上往下；上完的变淡打勾，正在上的用黄色粉笔
-      if (b.leftProg) s += txt(bx + pw - 14, by + 24, escx(b.leftProg), { 'font-size': 11.5, opacity: '.6', 'text-anchor': 'end', 'font-family': 'inherit' });
-      var items = b.leftItems.slice(0, 10), nr = items.length > 8 ? 5 : 4, lh = nr === 5 ? 14.2 : 17, fs = nr === 5 ? 11.5 : 12.5, colW = (pw - 30) / 2;
-      items.forEach(function (it, i) {
-        var col = Math.floor(i / nr), row = i % nr, x = bx + 16 + col * colW, y = by + (nr === 5 ? 43 : 47) + row * lh;
-        var attr = { 'font-size': fs, 'class': 'lsn-' + it.st };
-        if (it.st === 'past') attr.opacity = '.36';
-        else if (it.st === 'now') { attr.fill = '#ffd76e'; attr['font-weight'] = 700; }
-        else attr.opacity = '.86';
-        if (it.mine && it.st !== 'now') attr.fill = '#bfe0ff';
-        s += txt(x, y, escx(it.t) + (it.st === 'past' ? ' ✓' : ''), attr);
-        if (it.st === 'now') s += rect(x - 9, y - 9, 4, 10, 2, '#ffd76e');
-      });
-    } else (b.leftLines || []).slice(0, 4).forEach(function (ln, i) {
-      s += txt(bx + 16, by + 47 + i * 17, escx(ln), { 'font-size': 12.5, opacity: '.78' });
-    });
-    s += '</g>';
-    var rx0 = bx + BW - pw + 16;
-    s += '<g class="board-right' + (b.rightAct ? ' board-act' : '') + '" ' + chalk + (b.rightAct ? ' data-sact="' + b.rightAct + '"' : '') + '>';
-    if (b.rightAct) s += rect(bx + BW - pw, by, pw, BH, 2, 'transparent', { 'class': 'board-hit' });
-    s += txt(rx0, by + 24, escx(b.rightTitle || '值日'), { 'font-size': 14, opacity: '.95' });
-    (b.rightLines || []).slice(0, 4).forEach(function (ln, i) {
-      s += txt(rx0, by + 47 + i * 17, escx(ln), { 'font-size': 12.5, opacity: '.78' });
-    });
-    s += '</g>';
     // 智慧屏内容
     var cxs = sx + SW / 2;
     s += '<g class="screen" font-family="inherit" fill="#fff" text-anchor="middle">';
@@ -1786,7 +1818,7 @@ var ART = (function () {
 /* =========================================================
    CORE · 工具函数、存储、数据模型（多班级）、示例数据、查询与统计
    ========================================================= */
-var VERSION = '2.3.3';
+var VERSION = '2.4.0';
 var STORE_KEY = 'bzr-workbench-v2';
 /* 旧版本的数据：v1.1 班主任工作台（单个班）、任课教师工作台。第一次打开 v2.0 时自动接过来，旧数据原样保留 */
 var LEGACY_KEYS = ['bzr-workbench-v1', 'rk-workbench-v1'];
@@ -4173,13 +4205,17 @@ UI.act['pick'] = function () {
   Cls.recentPicks.push(final.id); if (Cls.recentPicks.length > Math.min(10, pool.length - 1)) Cls.recentPicks.shift();
   Cls.picking = true; UI.hideCard();
   var stage = $('#stage'); stage.classList.add('picking');
+  /* 本版修改：随机点名改为全屏大字，教室后排也能看清 */
+  $('#pickCard').innerHTML = '<div class="pick-full"><button class="modal-x pf-x" data-act="pick-close" aria-label="关闭">' + ICON.x + '</button>' +
+    '<div class="pf-inner"><div class="pf-k">随机点名</div><div class="pf-name" id="pfName">—</div><div class="pf-sub" id="pfSub">正在抽…</div><div class="pf-ops" id="pfOps"></div></div></div>';
   var steps = REDUCED ? 1 : 16, i = 0, delay = 55, last = null, token = Cls.pickToken = (Cls.pickToken || 0) + 1;
-  function alive() { return Cls.pickToken === token && UI.page === 'class' && $('#pickCard'); }
+  function alive() { return Cls.pickToken === token && UI.page === 'class' && $('#pickCard') && $('#pfName'); }
   function step() {
     if (!alive()) { if (Cls.pickToken === token) Cls.picking = false; return; }
     var cand = i < steps - 1 ? pool[Math.floor(Math.random() * pool.length)] : final;
     if (last) last.classList.remove('picked');
     last = seatElBySid(cand.id); if (last) last.classList.add('picked');
+    var nm = $('#pfName'); if (nm) nm.textContent = cand.name;
     i++;
     if (i < steps) { delay *= 1.16; setTimeout(step, delay); }
     else setTimeout(function () { done(); }, 120);
@@ -4189,9 +4225,11 @@ UI.act['pick'] = function () {
     Cls.picking = false;
     var el = seatElBySid(final.id); if (el) el.classList.add('turn', 'hand', 'picked');
     var tch = $('.scene-svg .teacher'); if (tch) tch.classList.add('point');
-    $('#pickCard').innerHTML = '<div class="pick-card">' + stuAva(final, 60) + '<div><div class="muted" style="font-size:12px">请回答问题</div><div class="nm">' + esc(final.name) + '</div><div class="muted" style="font-size:12px">' + esc(final.no || '') + (final.tags.length ? ' · ' + esc(final.tags[0]) : '') + '</div></div>' +
-      '<div style="display:flex;flex-direction:column;gap:6px;margin-left:10px"><button class="btn btn-sm btn-dark" data-act="pick-good" data-sid="' + final.id + '">回答得好 +1</button><button class="btn btn-sm btn-light" data-act="pick">' + ICON.dice + '再抽一个</button></div>' +
-      '<button class="modal-x" data-act="pick-close" style="align-self:flex-start" aria-label="关闭">' + ICON.x + '</button></div>';
+    var nm2 = $('#pfName'); if (nm2) nm2.textContent = final.name;
+    var sb = $('#pfSub');
+    if (sb) sb.innerHTML = esc(final.no || '') + (final.tags && final.tags.length ? ' · ' + esc(final.tags[0]) : '') + ' · 请回答问题';
+    var ops = $('#pfOps');
+    if (ops) ops.innerHTML = '<button class="btn btn-dark" data-act="pick-good" data-sid="' + final.id + '">回答得好 +1</button><button class="btn btn-light" data-act="pick">' + ICON.dice + '再抽一个</button>';
   }
   step();
 };
@@ -4621,23 +4659,8 @@ function hrLessonsForBoard(c) {
   return { day: day, list: list };
 }
 function hrBoardData(c) {
-  var o = hrScreen(c), lb = hrLessonsForBoard(c), t = todayStr();
-  if (cttFilled(c.id) && lb.list.length) {
-    var done = lb.list.filter(function (e) { return periodState(e.p, e.ds) === 'past'; }).length;
-    var d = parseDate(lb.day);
-    o.leftTitle = (lb.day === t ? '今日课程' : dayLabel(lb.day) + '的课') + ' · 周' + WEEK[d.getDay()];
-    o.leftProg = lb.day === t ? done + '/' + lb.list.length : '';
-    o.leftItems = lb.list.map(function (e) { return { t: periodShort(e.p.name) + ' ' + e.sub, st: periodState(e.p, e.ds), mine: e.mine }; });
-  } else if (S.settings.boardLeft) {
-    o.leftTitle = '今日课程'; o.leftLines = String(S.settings.boardLeft).split('\n');
-  } else {
-    o.leftTitle = '今日课程'; o.leftLines = ['还没有排班级课表', '点这里，按星期排好', '每天自动换成当天的课'];
-  }
-  o.leftAct = 'ctt-open';
-  var right = [];
-  String(S.settings.hrNote || '').split('\n').forEach(function (l) { if (l.trim()) right.push(l.trim()); });
-  if (!right.length) right.push('在 设置 → 全科与班级 里写今日事项');
-  o.rightTitle = '今日事项'; o.rightLines = right;
+  var o = hrScreen(c);
+  /* 本版修改：黑板两侧的「今日课程」「今日事项」已删除，只保留中间的智慧屏 */
   o.lTitle = '本周之星'; o.stars = weekStars(c); o.rTitle = '本月寿星'; o.rColor = '#e5483b'; o.bdays = monthBirthdays(c);
   return o;
 }
@@ -7798,8 +7821,6 @@ function renderSetBody() {
         }).join('') + '</div>' +
         '<div class="muted" style="font-size:12px;margin-top:8px">第二个数字是折算系数：物理 0.9、化学 0.6，语数英填 1；填 0 的科目不会出现在成绩表里。总分满分按「满分 × 系数」相加。</div>' +
         '<div style="display:flex;gap:6px;margin-top:12px;flex-wrap:wrap"><input class="inp" id="newSub" placeholder="科目名" style="width:140px;height:32px" maxlength="8"><input class="inp num" id="newSubFull" value="100" style="width:72px;height:32px"><button class="btn btn-light btn-sm" data-act="set-sub-add">添加科目</button><button class="btn btn-ghost btn-sm" data-act="set-sub-preset">按' + esc(st.stage) + '重置</button></div></div>';
-      h += '<div class="panel set-sec"><div class="panel-title">黑板 · 今日事项</div><div class="panel-sub">写在课堂黑板右侧，一行一条</div>' +
-        '<textarea class="ta" style="max-width:520px;min-height:84px" data-inp="set" data-path="hrNote" placeholder="如：周五前交秋游安全回执">' + esc(st.hrNote || '') + '</textarea></div>';
     }
   } else if (SetP.sec === 'periods') {
     var tpls = st.periodTpls, tcur = periodTplById(st.tplId) || tpls[0], tusers = S.classes.filter(function (c) { return c.periodsId === tcur.id; });
