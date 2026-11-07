@@ -1003,6 +1003,9 @@ body.has-guard .welcome { top: var(--gb-h, 40px); }
 }
 
 .stu-photo { border-radius: 50%; object-fit: cover; background: #f3f3f2; display: inline-block; vertical-align: middle; }
+/* 本版修改：个人档案里的成绩对比，上升红色、下降绿色 */
+.drawer .up { color: var(--red); }
+.drawer .dn { color: var(--green); }
 .ava-edit { display: flex; gap: 14px; align-items: center; margin: 0 0 16px; }
 .ava-prev { flex: none; }
 .ava-prev .ava { border-radius: 50%; display: block; }
@@ -1901,7 +1904,7 @@ var ART = (function () {
 /* =========================================================
    CORE · 工具函数、存储、数据模型（多班级）、示例数据、查询与统计
    ========================================================= */
-var VERSION = '2.6.4';
+var VERSION = '2.6.5';
 var STORE_KEY = 'bzr-workbench-v2';
 /* 旧版本的数据：v1.1 班主任工作台（单个班）、任课教师工作台。第一次打开 v2.0 时自动接过来，旧数据原样保留 */
 var LEGACY_KEYS = ['bzr-workbench-v1', 'rk-workbench-v1'];
