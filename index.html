@@ -1259,14 +1259,6 @@ var ART = (function () {
       '</defs>';
   }
 
-  /* 本版修改：座位上用档案上传的真人照片（圆形裁剪） */
-  function photoHead(st, r) {
-    var id = 'ph' + String(st.id || st.name).replace(/[^a-zA-Z0-9_-]/g, '');
-    return '<defs><clipPath id="' + id + '"><circle cx="0" cy="0" r="' + r + '"/></clipPath></defs>' +
-      '<circle cx="0" cy="0" r="' + r + '" fill="#e9e9e7"/>' +
-      '<image href="' + st.photo + '" x="' + (-r) + '" y="' + (-r) + '" width="' + (r * 2) + '" height="' + (r * 2) + '" preserveAspectRatio="xMidYMid slice" clip-path="url(#' + id + ')"/>' +
-      '<circle cx="0" cy="0" r="' + r + '" fill="none" stroke="' + INK + '" stroke-width="2"/>';
-  }
   /* ---------- 角色：学生（背面坐姿，原点=头部中心） ---------- */
   function studentFigure(st, color) {
     var g = st.gender === 'F';
@@ -1311,7 +1303,7 @@ var ART = (function () {
       circ(-5.6, 0.4, 2.3, INK) + circ(7.6, 0.4, 2.3, INK) +
       ell(-11, 7, 3, 1.7, '#ff8f86', { opacity: '.55' }) + ell(11, 7, 3, 1.7, '#ff8f86', { opacity: '.55' }) +
       '</g>';
-    s += '<g class="head">' + (st.photo ? photoHead(st, 17) : head) + '</g>';
+    s += '<g class="head">' + head + '</g>';
     s += '<g class="zz">' + txt(16, -18, 'z', { 'font-size': 11, 'font-weight': 700, fill: '#9a9a9a' }) + txt(24, -28, 'z', { 'font-size': 8, 'font-weight': 700, fill: '#b5b5b5' }) + '</g>';
     return s;
   }
@@ -1927,7 +1919,7 @@ var ART = (function () {
 /* =========================================================
    CORE · 工具函数、存储、数据模型（多班级）、示例数据、查询与统计
    ========================================================= */
-var VERSION = '2.8.0';
+var VERSION = '2.8.1';
 var STORE_KEY = 'bzr-workbench-v2';
 /* 旧版本的数据：v1.1 班主任工作台（单个班）、任课教师工作台。第一次打开 v2.0 时自动接过来，旧数据原样保留 */
 var LEGACY_KEYS = ['bzr-workbench-v1', 'rk-workbench-v1'];
