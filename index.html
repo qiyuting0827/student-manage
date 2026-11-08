@@ -215,6 +215,21 @@ svg.ava { border-radius: 50%; overflow: hidden; }
 .seat.hand .arm { opacity: 1; transform: none; }
 .seat.sleep .head { transform: translateY(4px) rotate(-10deg); }
 .seat.sleep .zz { opacity: 1; animation: zz 2.2s ease-in-out infinite; }
+/* 本版修改：更多课堂小动作 */
+.seat .stu-in { transition: transform .35s cubic-bezier(.3, 1.2, .5, 1); }
+.seat.nod .head { animation: nodA 1.5s ease-in-out; }
+.seat.write .stu-in { transform: translateY(4px) rotate(-2deg); }
+.seat.write .head { transform: translateY(2px) rotate(6deg); }
+.seat.stretch .stu-in { animation: stretchA 1.8s ease-in-out; }
+.seat.look .head { animation: lookA 1.8s ease-in-out; }
+.seat.cheer .stu-in { animation: cheerA 1.5s ease-in-out; }
+.seat.cheer .arm { opacity: 1; transform: none; }
+.seat.scratch .head { animation: scratchA 1.6s ease-in-out; }
+@keyframes nodA { 0%, 100% { transform: none; } 30% { transform: translateY(3px) rotate(4deg); } 60% { transform: translateY(-1px) rotate(-2deg); } }
+@keyframes stretchA { 0%, 100% { transform: none; } 40% { transform: translateY(-6px) scaleY(1.06); } 70% { transform: translateY(-2px) scaleY(1.02); } }
+@keyframes lookA { 0%, 100% { transform: none; } 25% { transform: rotate(-9deg) translateX(-3px); } 65% { transform: rotate(9deg) translateX(3px); } }
+@keyframes cheerA { 0%, 100% { transform: none; } 30% { transform: translateY(-5px); } 55% { transform: translateY(-2px); } }
+@keyframes scratchA { 0%, 100% { transform: none; } 20% { transform: rotate(-6deg); } 50% { transform: rotate(5deg) translateY(-2px); } 80% { transform: rotate(-3deg); } }
 .seat.ghost .stu-in { opacity: .16; }
 .seat.ghost:hover .stu-in { opacity: .35; }
 .seat.dim .stu-in, .seat.dim .desk-g, .seat.dim .lbl { opacity: .35; }
@@ -1244,6 +1259,14 @@ var ART = (function () {
       '</defs>';
   }
 
+  /* 本版修改：座位上用档案上传的真人照片（圆形裁剪） */
+  function photoHead(st, r) {
+    var id = 'ph' + String(st.id || st.name).replace(/[^a-zA-Z0-9_-]/g, '');
+    return '<defs><clipPath id="' + id + '"><circle cx="0" cy="0" r="' + r + '"/></clipPath></defs>' +
+      '<circle cx="0" cy="0" r="' + r + '" fill="#e9e9e7"/>' +
+      '<image href="' + st.photo + '" x="' + (-r) + '" y="' + (-r) + '" width="' + (r * 2) + '" height="' + (r * 2) + '" preserveAspectRatio="xMidYMid slice" clip-path="url(#' + id + ')"/>' +
+      '<circle cx="0" cy="0" r="' + r + '" fill="none" stroke="' + INK + '" stroke-width="2"/>';
+  }
   /* ---------- 角色：学生（背面坐姿，原点=头部中心） ---------- */
   function studentFigure(st, color) {
     var g = st.gender === 'F';
@@ -1288,7 +1311,7 @@ var ART = (function () {
       circ(-5.6, 0.4, 2.3, INK) + circ(7.6, 0.4, 2.3, INK) +
       ell(-11, 7, 3, 1.7, '#ff8f86', { opacity: '.55' }) + ell(11, 7, 3, 1.7, '#ff8f86', { opacity: '.55' }) +
       '</g>';
-    s += '<g class="head">' + head + '</g>';
+    s += '<g class="head">' + (st.photo ? photoHead(st, 17) : head) + '</g>';
     s += '<g class="zz">' + txt(16, -18, 'z', { 'font-size': 11, 'font-weight': 700, fill: '#9a9a9a' }) + txt(24, -28, 'z', { 'font-size': 8, 'font-weight': 700, fill: '#b5b5b5' }) + '</g>';
     return s;
   }
@@ -1904,7 +1927,7 @@ var ART = (function () {
 /* =========================================================
    CORE · 工具函数、存储、数据模型（多班级）、示例数据、查询与统计
    ========================================================= */
-var VERSION = '2.7.0';
+var VERSION = '2.8.0';
 var STORE_KEY = 'bzr-workbench-v2';
 /* 旧版本的数据：v1.1 班主任工作台（单个班）、任课教师工作台。第一次打开 v2.0 时自动接过来，旧数据原样保留 */
 var LEGACY_KEYS = ['bzr-workbench-v1', 'rk-workbench-v1'];
@@ -2212,6 +2235,7 @@ function migrate(s) {
   if (!Array.isArray(s.settings.reasons)) s.settings.reasons = deepClone(DEFAULT_REASONS);
   s.settings.days = clamp(+s.settings.days || 5, 5, 7);
   ['classes', 'changes', 'units', 'hw', 'exams', 'points', 'todos', 'chats'].forEach(function (k) { if (!Array.isArray(s[k])) s[k] = []; });
+  /* 本版修改：积分宠物 */
   ['tt', 'prog', 'attendance', 'ctt', 'duty'].forEach(function (k) { if (!s[k] || typeof s[k] !== 'object' || Array.isArray(s[k])) s[k] = {}; });
   if (!Array.isArray(s.records)) s.records = [];
   s.records = s.records.filter(function (r) { return r && r.sid; });
@@ -4390,10 +4414,11 @@ function idleTick() {
   var seats = $$('.scene-svg .seat.has:not(.ghost):not(.dim)');
   if (!seats.length) return;
   var el = seats[Math.floor(Math.random() * seats.length)];
-  if (el.matches(':hover') || el.classList.contains('turn') || el.classList.contains('hand') || el.classList.contains('sleep')) return;
-  var acts = ['turn', 'turn', 'turn', 'hand', 'hand', 'sleep'], a = acts[Math.floor(Math.random() * acts.length)];
+  if (el.matches(':hover') || /\b(turn|hand|sleep|nod|write|stretch|look|cheer|scratch)\b/.test(el.getAttribute('class') || '')) return;
+  var acts = ['turn', 'turn', 'hand', 'hand', 'sleep', 'nod', 'write', 'stretch', 'look', 'cheer', 'scratch'], a = acts[Math.floor(Math.random() * acts.length)];
+  var dur = { sleep: 4200, hand: 2400, write: 2800, stretch: 2000, cheer: 1800, look: 2000, nod: 1600, scratch: 1800 };
   el.classList.add(a);
-  setTimeout(function () { el.classList.remove(a); }, a === 'sleep' ? 4200 : a === 'hand' ? 2400 : 1900);
+  setTimeout(function () { el.classList.remove(a); }, dur[a] || 1900);
   var t = $('.scene-svg .teacher');
   if (t) {
     var pu = t.querySelector('.t-pupil');
