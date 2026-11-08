@@ -1919,7 +1919,7 @@ var ART = (function () {
 /* =========================================================
    CORE · 工具函数、存储、数据模型（多班级）、示例数据、查询与统计
    ========================================================= */
-var VERSION = '2.8.5';
+var VERSION = '2.8.6';
 var STORE_KEY = 'bzr-workbench-v2';
 /* 旧版本的数据：v1.1 班主任工作台（单个班）、任课教师工作台。第一次打开 v2.0 时自动接过来，旧数据原样保留 */
 var LEGACY_KEYS = ['bzr-workbench-v1', 'rk-workbench-v1'];
@@ -6634,7 +6634,7 @@ function hrStatsAll(ex) {
 function hrDetailAllHTML(ex) {
   var s = hrStatsAll(ex), thr = S.settings.thr, full = s.full, many = (ex.cids || []).length > 1;
   var h = '<div class="an-sub"><div><b>' + esc(ex.name) + '</b><span class="muted">' + esc(ex.date) + ' · ' + s.n + ' 人参考 · 满分 ' + full + '</span></div></div>';
-  h += '<div class="panel" style="margin-top:16px;padding:20px 0 6px"><div style="padding:0 20px"><div class="panel-title">成绩排名</div><div class="panel-sub">按级部排名排序（没填级部排名的排在最后）；后两列是你手填的班级名次、级部名次</div></div><div style="max-height:520px;overflow:auto"><table class="tbl"><thead><tr><th>名次</th><th>姓名</th>' + (many ? '<th>班级</th>' : '') + '<th class="r">总分</th><th class="r">班级名次</th><th class="r">级部名次</th></tr></thead><tbody>' +
+  h += '<div class="panel" style="margin-top:16px;padding:20px 0 6px"><div style="padding:0 20px"><div class="panel-title">成绩排名</div><div class="panel-sub">按级部排名排序（没填级部排名的排在最后）；后两列是你手填的班级名次、级部名次</div></div><div style="max-height:520px;overflow:auto"><table class="tbl"><thead><tr><th>名次</th><th>姓名</th><th>年级</th><th>班级</th><th class="r">总分</th><th class="r">班级名次</th><th class="r">级部名次</th></tr></thead><tbody>' +
     s.rows.slice().sort(function (a, b) {
       var ga = rankGR(ex, a.sid), gb = rankGR(ex, b.sid);
       ga = ga === null ? 1e9 : ga; gb = gb === null ? 1e9 : gb;
@@ -6642,7 +6642,7 @@ function hrDetailAllHTML(ex) {
       return b.total - a.total;
     }).map(function (r, i) {
       var st = stuById(r.sid), k = clsById(r.cid), cs = rankCS(ex, r.sid), gr = rankGR(ex, r.sid), low = r.total < thrLine(full, 'pass');
-      return '<tr class="click" data-act="open-stu" data-sid="' + r.sid + '"><td class="num">' + (i + 1) + '</td><td><div class="nm">' + stuAva(st, 22) + stuNmH(st) + '</div></td>' + (many ? '<td><span class="ctag"><i class="cdot" style="background:' + clsColor(k) + '"></i>' + esc(k.name) + '</span></td>' : '') +
+      return '<tr class="click" data-act="open-stu" data-sid="' + r.sid + '"><td class="num">' + (i + 1) + '</td><td><div class="nm">' + stuAva(st, 22) + stuNmH(st) + '</div></td>' + '<td class="sub">' + (st.grade ? esc(st.grade) : '<span class="muted">—</span>') + '</td>' + '<td class="sub">' + (st.sclass ? esc(st.sclass) : '<span class="muted">—</span>') + '</td>' +
         '<td class="r num' + (low ? ' dn' : '') + '"><b>' + fmtNum(r.total, 1) + '</b></td><td class="r num">' + (cs === null ? '<span class="muted">—</span>' : cs) + '</td><td class="r num">' + (gr === null ? '<span class="muted">—</span>' : gr) + '</td></tr>';
     }).join('') + '</tbody></table></div></div>';
   return h;
@@ -6690,17 +6690,17 @@ function anCmpHTML(a, b) {
     if (!arr.length) return '<div class="empty">没有达到明显变化的学生</div>';
     return '<div class="mini-list">' + arr.map(function (x) {
       var st = x.r.st, k = clsById(x.r.cid);
-      return '<button class="mini-item" data-act="open-stu" data-sid="' + st.id + '">' + stuAva(st, 26) + '<span class="grow">' + stuNmH(st) + (k ? ' <span class="muted" style="font-size:12px">' + esc(k.name) + '</span>' : '') + '</span><span class="r">' + fmtMove(x.r, x.m) + '</span></button>';
+      return '<button class="mini-item" data-act="open-stu" data-sid="' + st.id + '">' + stuAva(st, 26) + '<span class="grow">' + stuNmH(st) + ' <span class="muted" style="font-size:12px">' + esc(((st.grade || '') + (st.sclass ? ' · ' + st.sclass : '')) || '年级班级未填') + '</span>' + '</span><span class="r">' + fmtMove(x.r, x.m) + '</span></button>';
     }).join('') + '</div>';
   }
   var h = '<div class="panel"><div class="panel-title">成绩对比 · ' + esc(a.name) + ' → ' + esc(b.name) + '</div><div class="panel-sub">进步明显按级部名次前进 ≥ 10 名（没有级部名次看班级名次 ≥ 5 名，再没有看总分 ≥ 20 分）判定，退步同理。再点一下考试卡片可取消勾选</div>' +
     '<div class="grid2" style="margin-top:14px"><div><div class="panel-title" style="font-size:13px">进步明显 · ' + up.length + ' 人</div>' + listHTML(up) + '</div>' +
     '<div><div class="panel-title" style="font-size:13px">退步明显 · ' + dn.length + ' 人</div>' + listHTML(dn) + '</div></div></div>';
-  h += '<div class="panel" style="margin-top:16px;padding:20px 0 6px"><div style="padding:0 20px"><div class="panel-title">逐个学生变化</div><div class="panel-sub">各科列显示 B 相对 A 的分数变化；名次列显示 A→B 与进退</div></div><div style="max-height:560px;overflow:auto"><table class="tbl"><thead><tr><th>姓名</th><th>班级</th>' + subs.map(function (nm) { return '<th class="r">' + esc(nm) + ' Δ</th>'; }).join('') + '<th class="r">总分</th><th class="r">班级名次</th><th class="r">级部名次</th></tr></thead><tbody>' +
+  h += '<div class="panel" style="margin-top:16px;padding:20px 0 6px"><div style="padding:0 20px"><div class="panel-title">逐个学生变化</div><div class="panel-sub">各科列显示 B 相对 A 的分数变化；名次列显示 A→B 与进退</div></div><div style="max-height:560px;overflow:auto"><table class="tbl"><thead><tr><th>姓名</th><th>年级</th><th>班级</th>' + subs.map(function (nm) { return '<th class="r">' + esc(nm) + ' Δ</th>'; }).join('') + '<th class="r">总分</th><th class="r">班级名次</th><th class="r">级部名次</th></tr></thead><tbody>' +
     rows.slice().sort(function (x, y) { var gx = x.dG === null ? -1e9 : x.dG, gy = y.dG === null ? -1e9 : y.dG; if (gx !== gy) return gy - gx; return (y.dT || 0) - (x.dT || 0); }).map(function (r) {
       var k = clsById(r.cid);
       function dv(v) { return v === null ? '<span class="muted">—</span>' : (v > 0 ? '<span class="up">+' + fmtNum(v, 1) + '</span>' : v < 0 ? '<span class="dn">' + fmtNum(v, 1) + '</span>' : '0'); }
-      return '<tr class="click" data-act="open-stu" data-sid="' + r.sid + '"><td><div class="nm">' + stuAva(r.st, 22) + stuNmH(r.st) + '</div></td><td>' + (k ? '<span class="ctag"><i class="cdot" style="background:' + clsColor(k) + '"></i>' + esc(k.name) + '</span>' : '—') + '</td>' +
+      return '<tr class="click" data-act="open-stu" data-sid="' + r.sid + '"><td><div class="nm">' + stuAva(r.st, 22) + stuNmH(r.st) + '</div></td>' + '<td class="sub">' + (r.st.grade ? esc(r.st.grade) : '<span class="muted">—</span>') + '</td>' + '<td class="sub">' + (r.st.sclass ? esc(r.st.sclass) : '<span class="muted">—</span>') + '</td>' +
         subs.map(function (nm) { return '<td class="r num">' + dv(r.sd[nm]) + '</td>'; }).join('') +
         '<td class="r num">' + dv(r.dT) + '</td>' +
         '<td class="r num">' + (r.cs1 === null && r.cs2 === null ? '<span class="muted">—</span>' : (r.cs1 === null ? '—' : r.cs1) + '→' + (r.cs2 === null ? '—' : r.cs2) + (r.dC === null ? '' : ' <span class="' + (r.dC > 0 ? 'up' : r.dC < 0 ? 'dn' : '') + '">' + (r.dC > 0 ? '↑' + r.dC : r.dC < 0 ? '↓' + (-r.dC) : '') + '</span>')) + '</td>' +
