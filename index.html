@@ -1919,7 +1919,7 @@ var ART = (function () {
 /* =========================================================
    CORE · 工具函数、存储、数据模型（多班级）、示例数据、查询与统计
    ========================================================= */
-var VERSION = '2.8.1';
+var VERSION = '2.8.2';
 var STORE_KEY = 'bzr-workbench-v2';
 /* 旧版本的数据：v1.1 班主任工作台（单个班）、任课教师工作台。第一次打开 v2.0 时自动接过来，旧数据原样保留 */
 var LEGACY_KEYS = ['bzr-workbench-v1', 'rk-workbench-v1'];
@@ -2204,7 +2204,7 @@ function defaultState() {
       lastBackup: 0, onboarded: false, maskSeq: 0, cur: '',
       hr: '', subjects: subjectsPreset('初中'), hrNote: '', boardLeft: ''
     },
-    classes: [], tt: {}, changes: [], units: [], prog: {}, hw: [], exams: [], points: [], todos: [], chats: [],
+    classes: [], tt: {}, changes: [], units: [], prog: {}, hw: [], exams: [], points: [], todos: [], chats: [], alumni: [],
     attendance: {}, records: [], ctt: {}, duty: {}
   };
 }
@@ -5160,7 +5160,7 @@ UI.register('students', {
     else Stu.cid = (curCls() || {}).id || '';
     var n = allStudents().length;
     main.innerHTML = '<div class="page scroll"><div class="page-head"><div><h1 class="page-title">学生名单</h1><div class="page-desc">' + S.classes.length + ' 个班 · 共 ' + n + ' 人 · 每个班都有完整档案（家庭、联系人、生日等）</div></div><div class="grow"></div>' +
-      '<button class="btn btn-ghost" data-act="stu-cls-edit">' + ICON.gear + '班级设置</button><button class="btn btn-ghost" data-act="stu-nocheck">学号查重</button><button class="btn btn-light" data-act="stu-join">' + ICON.userplus + '从其他班加入</button><button class="btn btn-light" data-act="stu-import">' + ICON.up + '批量导入</button><button class="btn btn-light" data-act="stu-export">' + ICON.down + '导出名单</button><button class="btn btn-dark" data-act="stu-add">' + ICON.userplus + '添加学生</button></div>' +
+      '<button class="btn btn-ghost" data-act="stu-cls-edit">' + ICON.gear + '班级设置</button><button class="btn btn-ghost" data-act="stu-nocheck">学号查重</button><button class="btn btn-ghost" data-act="stu-alumni">历史档案</button><button class="btn btn-light" data-act="stu-join">' + ICON.userplus + '从其他班加入</button><button class="btn btn-light" data-act="stu-import">' + ICON.up + '批量导入</button><button class="btn btn-light" data-act="stu-export">' + ICON.down + '导出名单</button><button class="btn btn-dark" data-act="stu-add">' + ICON.userplus + '添加学生</button></div>' +
       '<div class="filterbar"><div class="chips" id="stuChips"></div><input class="inp" placeholder="在全部班级里搜姓名、学号、标签" value="' + esc(Stu.q) + '" data-inp="stu-q" id="stuQ" style="margin-left:auto"></div>' +
       '<div class="tbl-wrap" id="stuTbl"></div></div>';
     Stu.renderTable();
@@ -5290,7 +5290,7 @@ function openStudentForm(st, opts) {
     '<div id="fHrBox"><div class="hr"></div>' + hrFormHTML(d) + '</div>';
   UI.modal({
     title: isNew ? '添加学生' : '编辑 · ' + stuNmH(st), body: body, wide: hrOn,
-    foot: (isNew ? '<label class="chk" style="margin-right:auto"><input type="checkbox" id="fMore"> 保存后继续添加</label>' : '<button class="btn btn-ghost" data-act="stu-del" data-sid="' + d.id + '" style="margin-right:auto;color:var(--red)">' + ICON.trash + '删除</button>') +
+    foot: (isNew ? '<label class="chk" style="margin-right:auto"><input type="checkbox" id="fMore"> 保存后继续添加</label>' : '<button class="btn btn-ghost" data-act="stu-out" data-sid="' + d.id + '" style="margin-right:auto">移出本班（留档案）</button><button class="btn btn-ghost" data-act="stu-del" data-sid="' + d.id + '" style="color:var(--red)">' + ICON.trash + '彻底删除</button>') +
       '<button class="btn btn-light" data-act="modal-close">取消</button><button class="btn btn-dark" data-act="stu-save" data-new="' + (isNew ? 1 : 0) + '">保存</button>'
   });
   dupHintUpdate();
@@ -5359,6 +5359,90 @@ UI.act['stu-save'] = function (el) {
   if (UI.drawerSid === d.id) openStudent(d.id, Stu.tab);
   if (more) { openStudentForm(null, { cid: to.id }); var c = $('#fMore'); if (c) c.checked = true; }
   Stu.formSeat = null;
+};
+/* 本版修改：学生离班时可以「移出本班并归档」，档案与历次成绩永久保留 */
+function alumniList() { if (!Array.isArray(S.alumni)) S.alumni = []; return S.alumni; }
+function aluRec(sid) { var a = alumniList(); for (var i = 0; i < a.length; i++) if (a[i].stu && a[i].stu.id === sid) return a[i]; return null; }
+function stuStillIn(sid) { return S.classes.some(function (c) { return c.students.some(function (x) { return x.id === sid; }); }); }
+function archiveStu(st, from) {
+  if (aluRec(st.id)) return;
+  alumniList().push({ stu: JSON.parse(JSON.stringify(st)), from: from || '', at: todayStr() });
+}
+UI.act['stu-out'] = function (el) {
+  var st = stuById(el.getAttribute('data-sid')); if (!st) return;
+  var c = clsById(Stu.cid) || clsOfStu(st.id); if (!c) return;
+  var others = classesOfStu(st.id).filter(function (x) { return x.id !== c.id; });
+  var tip = others.length
+    ? '「' + esc(st.name) + '」还在 ' + others.map(function (x) { return x.name; }).join('、') + '，这次只是从「' + c.name + '」移出，档案不受影响。'
+    : '「' + esc(st.name) + '」不在其他班了，会从「' + c.name + '」移出并放进历史档案：成绩、考勤、评语都保留，可以随时查看或恢复。';
+  UI.confirm('移出班级', tip, '移出', function () {
+    c.students = c.students.filter(function (x) { return x.id !== st.id; });
+    if (c.seats) delete c.seats[st.id];
+    if (!stuStillIn(st.id)) archiveStu(st, c.name);
+    save(); UI.closeModal(); refreshAfterChange();
+    UI.toast('已移出 ' + c.name + (stuStillIn(st.id) ? '' : '，档案已归档'));
+  }, true);
+};
+UI.act['stu-alumni'] = function () {
+  var a = alumniList();
+  var body = '<div class="panel-sub" style="margin:-2px 0 12px">从班级移出的学生都在这里，档案和历次成绩永久保留，可以随时恢复。</div>';
+  if (!a.length) body += '<div class="empty">还没有离班归档的学生</div>';
+  else body += '<div class="tbl-wrap"><table class="tbl"><thead><tr><th class="w-name">姓名</th><th>学号</th><th>原班级</th><th>离班日期</th><th class="ops">操作</th></tr></thead><tbody>' +
+    a.map(function (r) {
+      var st = r.stu;
+      return '<tr><td><div class="nm">' + stuAva(st, 22) + esc(st.name) + '</div></td><td>' + esc(st.no || '—') + '</td><td>' + esc(r.from || '—') + '</td><td>' + esc(r.at || '—') + '</td><td class="ops">' +
+        '<button class="btn btn-xs btn-light" data-act="alu-view" data-sid="' + st.id + '">查看档案</button>' +
+        '<button class="btn btn-xs btn-light" data-act="alu-back" data-sid="' + st.id + '">恢复</button>' +
+        '<button class="btn btn-xs btn-ghost" data-act="alu-del" data-sid="' + st.id + '" style="color:var(--red)">永久删除</button></td></tr>';
+    }).join('') + '</tbody></table></div>';
+  UI.modal({ title: '历史档案 · 离班学生', body: body, foot: '<button class="btn btn-light" data-act="modal-close">关闭</button>', wide: true });
+};
+UI.act['alu-view'] = function (el) {
+  var r = aluRec(el.getAttribute('data-sid')); if (!r) return;
+  var st = r.stu;
+  var rows = S.exams.filter(function (e) { return e.scores && e.scores[st.id]; }).map(function (e) {
+    var subs = hrSubs(e), cells = subs.map(function (nm) { var v = hrVal(e, st.id, nm); return '<td class="r num">' + (v === undefined || v === null ? '—' : fmtNum(v, 1)) + '</td>'; }).join('');
+    var tot = hrTotalOf(e, st.id);
+    return '<tr><td>' + esc(e.name) + '<div class="muted" style="font-size:11.5px">' + esc(e.date || '') + '</div></td>' + cells + '<td class="r num"><b>' + (tot === null ? '—' : fmtNum(tot, 1)) + '</b></td><td class="c num">' + (rankCS(e, st.id) === null ? '—' : rankCS(e, st.id)) + '</td><td class="c num">' + (rankGR(e, st.id) === null ? '—' : rankGR(e, st.id)) + '</td></tr>';
+  }).join('');
+  var head = (S.exams.length && S.exams.filter(function (e) { return e.scores && e.scores[st.id]; })[0] ? hrSubs(S.exams.filter(function (e) { return e.scores && e.scores[st.id]; })[0]) : []);
+  var body = '<div class="dr-hero" style="padding:0 0 14px;display:flex;gap:14px;align-items:center">' + stuAva(st, 64) +
+    '<div><div style="font-size:18px;font-weight:700">' + esc(st.name) + '</div><div class="muted">学号 ' + esc(st.no || '—') + ' · 原班级 ' + esc(r.from || '—') + ' · ' + esc(r.at || '') + ' 离班</div></div></div>';
+  body += '<div class="panel" style="padding:16px"><div class="panel-title">历史成绩</div>';
+  if (rows) body += '<div class="tbl-wrap"><table class="tbl"><thead><tr><th>考试</th>' + head.map(function (nm) { return '<th class="c">' + esc(nm) + '</th>'; }).join('') + '<th class="c">总分</th><th class="c">班级名次</th><th class="c">级部名次</th></tr></thead><tbody>' + rows + '</tbody></table></div>';
+  else body += '<div class="empty">还没有成绩记录</div>';
+  body += '</div>';
+  var prof = profShow(st, 'study');
+  if (prof) body += '<div class="panel" style="padding:16px;margin-top:12px"><div class="panel-title">档案</div><div class="info-grid"><div class="k">学习情况</div><div>' + prof + '</div><div class="k">性格特长</div><div>' + (profShow(st, 'personality') || '—') + '</div><div class="k">健康情况</div><div>' + (profShow(st, 'health') || '—') + '</div><div class="k">家庭备注</div><div>' + (profShow(st, 'familyNote') || '—') + '</div><div class="k">老师备注</div><div>' + (esc(st.note) || '—') + '</div></div></div>';
+  UI.modal({ title: '历史档案 · ' + st.name, body: body, foot: '<button class="btn btn-light" data-act="stu-alumni">返回列表</button><button class="btn btn-dark" data-act="alu-back" data-sid="' + st.id + '">恢复到班级</button>', wide: true });
+};
+UI.act['alu-back'] = function (el) {
+  var r = aluRec(el.getAttribute('data-sid')); if (!r) return;
+  var cs = S.classes;
+  if (!cs.length) { UI.toast('还没有班级，先建一个班'); return; }
+  UI.modal({ title: '恢复到哪个班', body: '<div class="panel-sub" style="margin:-2px 0 12px">恢复后这份档案会重新出现在该班名单里，历史成绩不用重录。</div><div class="chips">' +
+    cs.map(function (c) { return '<button class="btn btn-light" data-act="alu-back-ok" data-sid="' + r.stu.id + '" data-cid="' + c.id + '">' + esc(c.name) + '</button>'; }).join('') + '</div>',
+    foot: '<button class="btn btn-light" data-act="modal-close">取消</button>' });
+};
+UI.act['alu-back-ok'] = function (el) {
+  var sid = el.getAttribute('data-sid'), cid = el.getAttribute('data-cid');
+  var r = aluRec(sid), c = clsById(cid); if (!r || !c) return;
+  if (!c.students.some(function (x) { return x.id === sid; })) c.students.push(r.stu);
+  S.alumni = alumniList().filter(function (x) { return !(x.stu && x.stu.id === sid); });
+  save(); UI.closeModal();
+  Stu.cid = c.id; refreshAfterChange();
+  UI.toast('已恢复到 ' + c.name);
+};
+UI.act['alu-del'] = function (el) {
+  var sid = el.getAttribute('data-sid'), r = aluRec(sid); if (!r) return;
+  UI.confirm('永久删除', '「' + esc(r.stu.name) + '」的档案和全部历史成绩都会删除，无法恢复。确定吗？', '永久删除', function () {
+    S.alumni = alumniList().filter(function (x) { return !(x.stu && x.stu.id === sid); });
+    S.points = S.points.filter(function (p) { return p.sid !== sid; });
+    S.exams.forEach(function (e) { delete e.scores[sid]; if (e.ss) delete e.ss[sid]; if (e.ranks) delete e.ranks[sid]; });
+    S.records = (S.records || []).filter(function (x) { return x.sid !== sid; });
+    Object.keys(S.attendance || {}).forEach(function (k) { delete S.attendance[k][sid]; });
+    save(); UI.closeModal(); refreshAfterChange(); UI.toast('已永久删除');
+  }, true);
 };
 UI.act['stu-del'] = function (el) {
   var st = stuById(el.getAttribute('data-sid')); if (!st) return;
