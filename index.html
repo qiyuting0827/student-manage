@@ -1919,7 +1919,7 @@ var ART = (function () {
 /* =========================================================
    CORE · 工具函数、存储、数据模型（多班级）、示例数据、查询与统计
    ========================================================= */
-var VERSION = '2.8.2';
+var VERSION = '2.8.3';
 var STORE_KEY = 'bzr-workbench-v2';
 /* 旧版本的数据：v1.1 班主任工作台（单个班）、任课教师工作台。第一次打开 v2.0 时自动接过来，旧数据原样保留 */
 var LEGACY_KEYS = ['bzr-workbench-v1', 'rk-workbench-v1'];
@@ -5160,7 +5160,7 @@ UI.register('students', {
     else Stu.cid = (curCls() || {}).id || '';
     var n = allStudents().length;
     main.innerHTML = '<div class="page scroll"><div class="page-head"><div><h1 class="page-title">学生名单</h1><div class="page-desc">' + S.classes.length + ' 个班 · 共 ' + n + ' 人 · 每个班都有完整档案（家庭、联系人、生日等）</div></div><div class="grow"></div>' +
-      '<button class="btn btn-ghost" data-act="stu-cls-edit">' + ICON.gear + '班级设置</button><button class="btn btn-ghost" data-act="stu-nocheck">学号查重</button><button class="btn btn-ghost" data-act="stu-alumni">历史档案</button><button class="btn btn-light" data-act="stu-join">' + ICON.userplus + '从其他班加入</button><button class="btn btn-light" data-act="stu-import">' + ICON.up + '批量导入</button><button class="btn btn-light" data-act="stu-export">' + ICON.down + '导出名单</button><button class="btn btn-dark" data-act="stu-add">' + ICON.userplus + '添加学生</button></div>' +
+      '<button class="btn btn-ghost" data-act="stu-cls-edit">' + ICON.gear + '班级设置</button><button class="btn btn-ghost" data-act="stu-nocheck">学号查重</button><button class="btn btn-ghost" data-act="stu-alumni">历史档案</button><button class="btn btn-ghost" data-act="stu-batch">批量改年级/班级</button><button class="btn btn-light" data-act="stu-join">' + ICON.userplus + '从其他班加入</button><button class="btn btn-light" data-act="stu-import">' + ICON.up + '批量导入</button><button class="btn btn-light" data-act="stu-export">' + ICON.down + '导出名单</button><button class="btn btn-dark" data-act="stu-add">' + ICON.userplus + '添加学生</button></div>' +
       '<div class="filterbar"><div class="chips" id="stuChips"></div><input class="inp" placeholder="在全部班级里搜姓名、学号、标签" value="' + esc(Stu.q) + '" data-inp="stu-q" id="stuQ" style="margin-left:auto"></div>' +
       '<div class="tbl-wrap" id="stuTbl"></div></div>';
     Stu.renderTable();
@@ -5284,6 +5284,8 @@ function openStudentForm(st, opts) {
     '<div class="field"><label>性别</label><div class="seg light" id="fGender"><button type="button" class="' + (d.gender !== 'F' ? 'on' : '') + '" data-act="f-gender" data-g="M">男生</button><button type="button" class="' + (d.gender === 'F' ? 'on' : '') + '" data-act="f-gender" data-g="F">女生</button></div></div>' +
     '<div class="field"><label>学号</label><input class="inp num" id="fNo" value="' + esc(d.no) + '" data-inp="f-name"></div></div><div class="dup-hint hide" id="fDupHint"></div>' +
     '<div class="field"><label>班级</label><select class="sel" id="fCls" data-chg="f-cls">' + S.classes.map(function (c) { return '<option value="' + c.id + '"' + (c === c0 ? ' selected' : '') + '>' + esc(c.name) + '</option>'; }).join('') + '</select>' + '' + '</div>' +
+    '<div class="row2"><div class="field"><label>年级</label><input class="inp" id="fGrade" value="' + esc(d.grade || '') + '" maxlength="10" placeholder="如：初二 / 高一"></div>' +
+    '<div class="field"><label>在校班级</label><input class="inp" id="fSclass" value="' + esc(d.sclass || '') + '" maxlength="20" placeholder="如：3班"></div></div>' +
     '<div class="field"><label>标签</label><div class="chips" id="fTags">' + tagPool.concat(d.tags.filter(function (t) { return tagPool.indexOf(t) < 0; })).map(function (t) { return '<button type="button" class="' + (d.tags.indexOf(t) >= 0 ? 'on' : '') + '" data-act="f-tag" data-t="' + esc(t) + '">' + esc(t) + '</button>'; }).join('') +
     '<input class="inp" id="fTagNew" placeholder="+ 自定义" style="width:96px;height:28px;font-size:12.5px;border-radius:999px" data-key="f-tag-new"></div></div>' +
     '<div class="field"><label>老师备注</label><textarea class="ta" id="fNote" maxlength="300" placeholder="学习习惯、薄弱点、上课注意事项等，写评语和家长沟通时 AI 会参考">' + esc(d.note) + '</textarea></div>' +
@@ -5332,6 +5334,8 @@ UI.act['stu-save'] = function (el) {
   d.name = $('#fName').value.trim();
   if (!d.name) { $('#fName').focus(); UI.toast('请填写姓名'); return; }
   d.no = $('#fNo').value.trim(); d.note = $('#fNote').value.trim();
+  if ($('#fGrade')) d.grade = $('#fGrade').value.trim();
+  if ($('#fSclass')) d.sclass = $('#fSclass').value.trim();
   var to = clsById($('#fCls').value);
   // 学号全局唯一：不同班的学生也不能重号（同一学生跨班共用同一个学号，不算重复）
   var others = to.students.filter(function (s) { return s.id !== d.id; });
@@ -5382,6 +5386,33 @@ UI.act['stu-out'] = function (el) {
     save(); UI.closeModal(); refreshAfterChange();
     UI.toast('已移出 ' + c.name + (stuStillIn(st.id) ? '' : '，档案已归档'));
   }, true);
+};
+UI.act['stu-batch'] = function () {
+  var c = curCls(); if (!c) return;
+  var list = studentsOf(c.id);
+  if (!list.length) { UI.toast('这个班还没有学生'); return; }
+  var body = '<div class="panel-sub" style="margin:-2px 0 10px">勾选学生，填年级和在校班级；留空的项不会被修改</div>' +
+    '<label class="chk" style="margin-bottom:10px"><input type="checkbox" id="bAll" data-chg="b-all" checked> 全选（' + list.length + ' 人）</label>' +
+    '<div class="row2"><div class="field"><label>年级</label><input class="inp" id="bGrade" maxlength="10" placeholder="如：初二 / 高一"></div>' +
+    '<div class="field"><label>在校班级</label><input class="inp" id="bSclass" maxlength="20" placeholder="如：3班"></div></div>' +
+    '<div style="max-height:320px;overflow:auto;margin-top:10px">' + list.map(function (s) {
+      return '<label class="chk" style="display:flex;align-items:center;gap:8px;padding:6px 0"><input type="checkbox" class="b-stu" value="' + s.id + '" checked>' + stuAva(s, 22) +
+        '<span>' + esc(s.name) + '</span><span class="muted num">' + esc(s.no || '') + '</span>' +
+        (s.grade || s.sclass ? '<span class="muted" style="margin-left:auto">' + esc([s.grade, s.sclass].filter(Boolean).join(' ')) + '</span>' : '') + '</label>';
+    }).join('') + '</div>';
+  UI.modal({ title: '批量修改 · ' + c.name, body: body, wide: true, foot: '<button class="btn btn-light" data-act="modal-close">取消</button><button class="btn btn-dark" data-act="stu-batch-ok">应用</button>' });
+};
+UI.chg['b-all'] = function (el) {
+  $$('.b-stu').forEach(function (b) { b.checked = el.checked; });
+};
+UI.act['stu-batch-ok'] = function () {
+  var g = ($('#bGrade').value || '').trim(), sc = ($('#bSclass').value || '').trim();
+  if (!g && !sc) { UI.toast('年级和在校班级至少填一个'); return; }
+  var ids = $$('.b-stu').filter(function (b) { return b.checked; }).map(function (b) { return b.value; });
+  if (!ids.length) { UI.toast('还没勾选学生'); return; }
+  var k = 0;
+  ids.forEach(function (sid) { var st = stuById(sid); if (!st) return; if (g) st.grade = g; if (sc) st.sclass = sc; k++; });
+  save(); UI.closeModal(); refreshAfterChange(); UI.toast('已修改 ' + k + ' 位学生');
 };
 UI.act['stu-alumni'] = function () {
   var a = alumniList();
@@ -5810,6 +5841,7 @@ function hrDrawerTab(st, b) {
       '<div class="k">姓名</div><div>' + stuNmH(st) + '</div><div class="k">学号</div><div class="num">' + esc(st.no || '—') + '</div>' +
       '<div class="k">性别</div><div>' + (st.gender === 'F' ? '女' : '男') + '</div><div class="k">生日</div><div>' + (esc(st.birthday) || '—') + '</div>' +
       '<div class="k">职务</div><div>' + (esc(st.role) || '—') + '</div><div class="k">座位</div><div>' + stuSeatText(st) + '</div>' +
+      '<div class="k">年级</div><div>' + (esc(st.grade) || '—') + '</div><div class="k">在校班级</div><div>' + (esc(st.sclass) || '—') + '</div>' +
       '<div class="k">住宿</div><div>' + (st.boarding ? '住校' : '走读') + '</div><div class="k">本学期考勤</div><div>请假 ' + at.leave + ' 天 · 缺勤 ' + at.absent + ' 天 · 迟到 ' + at.late + ' 次</div></div></div>' +
       '<div class="panel" style="margin-top:16px"><div class="panel-title" style="margin-bottom:12px">家庭与联系人</div><div class="info-grid"><div class="k">家庭结构</div><div>' + esc(st.family || '—') + '</div>' +
       ps.map(function (p, i) { return '<div class="k">' + (i === 0 ? '主要联系人' : '其他联系人') + '</div><div>' + esc(p.name) + ' <span class="muted">' + esc(p.rel) + (p.job ? ' · ' + esc(p.job) : '') + '</span> <span class="num">' + esc(p.phone) + '</span>' + (p.phone ? ' <button class="btn btn-xs btn-ghost" data-act="copy-txt" data-t="' + esc(p.phone) + '">' + ICON.copy + '</button>' : '') + '</div>'; }).join('') +
