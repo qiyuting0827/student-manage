@@ -1919,7 +1919,7 @@ var ART = (function () {
 /* =========================================================
    CORE · 工具函数、存储、数据模型（多班级）、示例数据、查询与统计
    ========================================================= */
-var VERSION = '2.8.3';
+var VERSION = '2.8.4';
 var STORE_KEY = 'bzr-workbench-v2';
 /* 旧版本的数据：v1.1 班主任工作台（单个班）、任课教师工作台。第一次打开 v2.0 时自动接过来，旧数据原样保留 */
 var LEGACY_KEYS = ['bzr-workbench-v1', 'rk-workbench-v1'];
@@ -5270,6 +5270,25 @@ function nextNoGlobal(extra) {
   var n = String(max + 1); while (n.length < w) n = '0' + n;
   return pre + n;
 }
+/* 本版修改：年级、在校班级改为下拉选项 */
+var GRADE_OPTS = ['六年级', '七年级', '八年级', '九年级'];
+var SCLASS_OPTS = ['1班', '2班', '3班', '4班', '5班', '6班'];
+function gradeSel(id, val, emptyLabel) {
+  var v = String(val || '');
+  var opts = '';
+  if (emptyLabel) opts += '<option value="">' + emptyLabel + '</option>';
+  GRADE_OPTS.forEach(function (g) { opts += '<option' + (g === v ? ' selected' : '') + '>' + g + '</option>'; });
+  if (v && GRADE_OPTS.indexOf(v) < 0) opts += '<option selected>' + esc(v) + '</option>';
+  return '<select class="sel" id="' + id + '">' + opts + '</select>';
+}
+function sclassSel(id, val, emptyLabel) {
+  var v = String(val || '');
+  var opts = '';
+  if (emptyLabel) opts += '<option value="">' + emptyLabel + '</option>';
+  SCLASS_OPTS.forEach(function (g) { opts += '<option' + (g === v ? ' selected' : '') + '>' + g + '</option>'; });
+  if (v && SCLASS_OPTS.indexOf(v) < 0) opts += '<option selected>' + esc(v) + '</option>';
+  return '<select class="sel" id="' + id + '">' + opts + '</select>';
+}
 function openStudentForm(st, opts) {
   if (!S.classes.length) { UI.toast('先新建一个班级'); openClassForm(null); return; }
   var isNew = !st, c0 = st ? clsOfStu(st.id) : (clsById(opts.cid) || curCls());
@@ -5284,8 +5303,8 @@ function openStudentForm(st, opts) {
     '<div class="field"><label>性别</label><div class="seg light" id="fGender"><button type="button" class="' + (d.gender !== 'F' ? 'on' : '') + '" data-act="f-gender" data-g="M">男生</button><button type="button" class="' + (d.gender === 'F' ? 'on' : '') + '" data-act="f-gender" data-g="F">女生</button></div></div>' +
     '<div class="field"><label>学号</label><input class="inp num" id="fNo" value="' + esc(d.no) + '" data-inp="f-name"></div></div><div class="dup-hint hide" id="fDupHint"></div>' +
     '<div class="field"><label>班级</label><select class="sel" id="fCls" data-chg="f-cls">' + S.classes.map(function (c) { return '<option value="' + c.id + '"' + (c === c0 ? ' selected' : '') + '>' + esc(c.name) + '</option>'; }).join('') + '</select>' + '' + '</div>' +
-    '<div class="row2"><div class="field"><label>年级</label><input class="inp" id="fGrade" value="' + esc(d.grade || '') + '" maxlength="10" placeholder="如：初二 / 高一"></div>' +
-    '<div class="field"><label>在校班级</label><input class="inp" id="fSclass" value="' + esc(d.sclass || '') + '" maxlength="20" placeholder="如：3班"></div></div>' +
+    '<div class="row2"><div class="field"><label>年级</label>' + gradeSel('fGrade', d.grade, '未填写') + '</div>' +
+    '<div class="field"><label>在校班级</label>' + sclassSel('fSclass', d.sclass, '未填写') + '</div></div>' +
     '<div class="field"><label>标签</label><div class="chips" id="fTags">' + tagPool.concat(d.tags.filter(function (t) { return tagPool.indexOf(t) < 0; })).map(function (t) { return '<button type="button" class="' + (d.tags.indexOf(t) >= 0 ? 'on' : '') + '" data-act="f-tag" data-t="' + esc(t) + '">' + esc(t) + '</button>'; }).join('') +
     '<input class="inp" id="fTagNew" placeholder="+ 自定义" style="width:96px;height:28px;font-size:12.5px;border-radius:999px" data-key="f-tag-new"></div></div>' +
     '<div class="field"><label>老师备注</label><textarea class="ta" id="fNote" maxlength="300" placeholder="学习习惯、薄弱点、上课注意事项等，写评语和家长沟通时 AI 会参考">' + esc(d.note) + '</textarea></div>' +
@@ -5393,8 +5412,8 @@ UI.act['stu-batch'] = function () {
   if (!list.length) { UI.toast('这个班还没有学生'); return; }
   var body = '<div class="panel-sub" style="margin:-2px 0 10px">勾选学生，填年级和在校班级；留空的项不会被修改</div>' +
     '<label class="chk" style="margin-bottom:10px"><input type="checkbox" id="bAll" data-chg="b-all" checked> 全选（' + list.length + ' 人）</label>' +
-    '<div class="row2"><div class="field"><label>年级</label><input class="inp" id="bGrade" maxlength="10" placeholder="如：初二 / 高一"></div>' +
-    '<div class="field"><label>在校班级</label><input class="inp" id="bSclass" maxlength="20" placeholder="如：3班"></div></div>' +
+    '<div class="row2"><div class="field"><label>年级</label>' + gradeSel('bGrade', '', '不修改') + '</div>' +
+    '<div class="field"><label>在校班级</label>' + sclassSel('bSclass', '', '不修改') + '</div></div>' +
     '<div style="max-height:320px;overflow:auto;margin-top:10px">' + list.map(function (s) {
       return '<label class="chk" style="display:flex;align-items:center;gap:8px;padding:6px 0"><input type="checkbox" class="b-stu" value="' + s.id + '" checked>' + stuAva(s, 22) +
         '<span>' + esc(s.name) + '</span><span class="muted num">' + esc(s.no || '') + '</span>' +
