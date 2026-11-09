@@ -1919,7 +1919,7 @@ var ART = (function () {
 /* =========================================================
    CORE · 工具函数、存储、数据模型（多班级）、示例数据、查询与统计
    ========================================================= */
-var VERSION = '2.9.0';
+var VERSION = '2.9.2';
 var STORE_KEY = 'bzr-workbench-v2';
 /* 旧版本的数据：v1.1 班主任工作台（单个班）、任课教师工作台。第一次打开 v2.0 时自动接过来，旧数据原样保留 */
 var LEGACY_KEYS = ['bzr-workbench-v1', 'rk-workbench-v1'];
@@ -2204,7 +2204,7 @@ function defaultState() {
       lastBackup: 0, onboarded: false, maskSeq: 0, cur: '',
       hr: '', subjects: subjectsPreset('初中'), hrNote: '', boardLeft: ''
     },
-    classes: [], tt: {}, changes: [], units: [], prog: {}, hw: [], exams: [], points: [], todos: [], chats: [], alumni: [], kps: [], mis: [],
+    classes: [], tt: {}, changes: [], units: [], prog: {}, hw: [], exams: [], points: [], todos: [], chats: [], alumni: [], kps: [], mis: [], bank: [],
     attendance: {}, records: [], ctt: {}, duty: {}
   };
 }
@@ -7955,10 +7955,10 @@ function kpLogs(sid, kpId) {
 /* 掌握度：最近 5 次加权正确率 */
 function kpRate(sid, kpId) {
   var all = kpLogs(sid, kpId), r = all.slice(-5);
-  if (!r.length) return { n: 0, s: 0, ok: 0 };
+  if (!r.length) return { n: 0, s: 0, ok: 0, ex: '' };
   var w = KP_W.slice(5 - r.length), t = 0, d = 0, ok = 0;
   r.forEach(function (m, i) { t += w[i] * (m.ok ? 1 : 0); d += w[i]; if (m.ok) ok++; });
-  return { n: all.length, s: t / d, ok: ok };
+  return { n: all.length, s: t / d, ok: ok, ex: all[all.length - 1].ex || '' };
 }
 function kpState(r) {
   if (!r.n) return { t: '未记录', c: 'var(--ink3)' };
@@ -7999,7 +7999,7 @@ UI.register('wrong', {
     var total = rows.reduce(function (a, x) { return a + x.r.n; }, 0);
     var h = '<div class="page scroll"><div class="page-head"><div><h1 class="page-title">错题巩固</h1><div class="page-desc">' +
       (c ? esc(c.name) + ' · 记一次错题就多一份证据，最近 5 次加权正确率达到 90% 才算掌握' : '先建一个班级') + '</div></div><div class="grow"></div>' +
-      '<button class="btn btn-ghost" data-act="wr-kp">知识点库</button><button class="btn btn-dark" data-act="wr-add">' + ICON.plus + '记错题</button></div>' +
+      '<button class="btn btn-ghost" data-act="wr-kp">知识点库</button><button class="btn btn-ghost" data-act="wr-bank">题库</button><button class="btn btn-light" data-act="wr-scan">' + ICON.up + '拍照录入</button><button class="btn btn-dark" data-act="wr-add">' + ICON.plus + '记错题</button></div>' +
       '<div class="kpis"><div class="kpi"><div class="k">本班记录</div><div class="v">' + total + '</div><div class="d muted">条作答</div></div>' +
       '<div class="kpi"><div class="k">涉及知识点</div><div class="v">' + rows.length + '</div><div class="d muted">学生 × 知识点</div></div>' +
       '<div class="kpi"><div class="k">卡住了</div><div class="v" style="color:' + (stuck.length ? '#d9363e' : 'inherit') + '">' + stuck.length + '</div><div class="d muted">≥3 次仍未掌握</div></div>' +
@@ -8012,10 +8012,10 @@ UI.register('wrong', {
     } else if (!rows.length) {
       h += '<div class="empty">还没有错题记录。点右上角「记错题」，选学生和知识点，记一次就能开始跟踪。</div>';
     } else {
-      h += '<div class="tbl-wrap"><table class="tbl"><thead><tr><th>学生</th><th>知识点</th><th>科目</th><th>作答</th><th>掌握度</th><th>状态</th><th class="r">操作</th></tr></thead><tbody>';
+      h += '<div class="tbl-wrap"><table class="tbl"><thead><tr><th>学生</th><th>知识点</th><th>科目</th><th>来源</th><th>作答</th><th>掌握度</th><th>状态</th><th class="r">操作</th></tr></thead><tbody>';
       rows.forEach(function (x) {
         var st = kpState(x.r);
-        h += '<tr><td><div class="nm">' + stuAva(x.st, 26) + stuNmH(x.st) + '</div></td><td>' + esc(x.k.name) + '</td><td class="sub">' + esc(x.k.sub) + '</td>' +
+        h += '<tr><td><div class="nm">' + stuAva(x.st, 26) + stuNmH(x.st) + '</div></td><td>' + esc(x.k.name) + '</td><td class="sub">' + esc(x.k.sub) + '</td><td class="sub">' + (x.r.ex && examById(x.r.ex) ? esc(shortExam(examById(x.r.ex).name)) : '<span class="muted">—</span>') + '</td>' +
           '<td class="num">' + x.r.n + ' <span class="muted">/ 近5次中 ' + x.r.ok + ' 次对</span></td><td>' + kpBar(x.r) + '</td>' +
           '<td><b style="color:' + st.c + ';font-weight:600">' + st.t + '</b></td>' +
           '<td class="r"><span class="ops"><button class="btn btn-xs btn-light" data-act="wr-mark" data-sid="' + x.st.id + '" data-kp="' + x.k.id + '" data-ok="1">做对</button><button class="btn btn-xs btn-ghost" data-act="wr-mark" data-sid="' + x.st.id + '" data-kp="' + x.k.id + '" data-ok="0">做错</button></span></td></tr>';
@@ -8025,13 +8025,60 @@ UI.register('wrong', {
     if (stuck.length) {
       h += '<div class="panel" style="margin-top:18px"><div class="panel-title">卡住的知识点</div><div class="panel-sub">连续记录 3 次以上仍未达到 90%，建议单独补讲</div><div class="mini-list">' +
         stuck.slice(0, 12).map(function (x) {
-          return '<div class="mini-row"><div class="nm">' + stuAva(x.st, 24) + stuNmH(x.st) + '</div><span class="muted">' + esc(x.k.sub) + ' · ' + esc(x.k.name) + '</span><span class="grow"></span><b class="num">' + Math.round(x.r.s * 100) + '%</b></div>';
+          return '<div class="mini-row"><div class="nm">' + stuAva(x.st, 24) + stuNmH(x.st) + '</div><span class="muted">' + esc(x.k.sub) + ' · ' + esc(x.k.name) + '</span><span class="grow"></span><b class="num">' + Math.round(x.r.s * 100) + '%</b>' +
+            '<span class="ops" style="margin-left:10px"><button class="btn btn-xs btn-light" data-act="wr-ai" data-sid="' + x.st.id + '" data-kp="' + x.k.id + '">AI 出题</button><button class="btn btn-xs btn-ghost" data-act="wr-report" data-sid="' + x.st.id + '">报告</button></span></div>';
         }).join('') + '</div></div>';
     }
     h += '</div>';
     main.innerHTML = h;
   }
 });
+
+function wrStuOpts(cid) {
+  return studentsOf(cid).map(function (s) { return '<option value="' + s.id + '">' + esc(s.name) + (s.no ? '（' + esc(s.no) + '）' : '') + '</option>'; }).join('');
+}
+function wrExamOpts(cid) {
+  var list = examsSorted().reverse().filter(function (e) { return (e.cids || []).indexOf(cid) >= 0; });
+  return '<option value="">不关联</option>' + list.map(function (e) { return '<option value="' + e.id + '">' + esc(e.name) + '</option>'; }).join('');
+}
+function wrAddRec(sid, kp, ok, ex) {
+  if (!kpById(kp) || !stuById(sid)) return;
+  S.mis.push({ id: uid(), sid: sid, kp: kp, ok: ok ? 1 : 0, at: Date.now(), ex: ex || '' });
+}
+/* 最近 7 天仍卡着的知识点 */
+function wrWeekStuck(sid) {
+  var from = Date.now() - 7 * 86400000, out = [];
+  kpAll().forEach(function (k) {
+    var logs = kpLogs(sid, k.id);
+    var week = logs.filter(function (m) { return m.at >= from; });
+    if (!week.length) return;
+    var r = kpRate(sid, k.id);
+    if (r.n >= 1 && r.s < 0.9) out.push({ k: k, r: r, week: week.length });
+  });
+  return out;
+}
+function wrReportText(st) {
+  var c = clsOfStu(st.id) || curCls() || {};
+  var stuck = wrWeekStuck(st.id);
+  var t = '【本周学习反馈】' + st.name + (st.grade || st.sclass ? '（' + [st.grade, st.sclass].filter(Boolean).join('') + '）' : '') + '\n';
+  t += '一、本周错题巩固\n';
+  if (!stuck.length) t += '本周没有新增卡住的知识点，保持得不错。\n';
+  else stuck.slice(0, 6).forEach(function (x) {
+    t += '· ' + x.k.sub + '·' + x.k.name + '：本周练了 ' + x.week + ' 次，最近 5 次正确率 ' + Math.round(x.r.s * 100) + '%，还没稳定。\n';
+  });
+  t += '二、需要家长配合\n';
+  if (!stuck.length) t += '继续保持每天 20 分钟复习即可。\n';
+  else t += '每天练 3 道「' + stuck[0].k.name + '」同类题，做完拍照发我，我看过后调整下周内容。\n';
+  t += '三、老师的话\n（这里写一两句鼓励的话）';
+  return t;
+}
+
+UI.chg['wr-cls'] = function (el) {
+  var cid = el.value;
+  var s1 = $('#wrSid'), s2 = $('#wrExam');
+  if (s1) s1.innerHTML = wrStuOpts(cid);
+  if (s2) s2.innerHTML = wrExamOpts(cid);
+};
 
 UI.act['wr-sub'] = function (el) {
   Wr.sub = el.getAttribute('data-sub') || '';
@@ -8041,22 +8088,24 @@ UI.act['wr-sub'] = function (el) {
 UI.act['wr-mark'] = function (el) {
   var sid = el.getAttribute('data-sid'), kp = el.getAttribute('data-kp'), ok = el.getAttribute('data-ok') === '1';
   if (!kpById(kp) || !stuById(sid)) return;
-  S.mis.push({ id: uid(), sid: sid, kp: kp, ok: ok ? 1 : 0, at: Date.now() });
+  wrAddRec(sid, kp, ok, '');
   save(); UI.rerender(); UI.toast(ok ? '记了一次「做对」' : '记了一次错题');
 };
 
 UI.act['wr-add'] = function () {
   var c = curCls(); if (!c) return UI.toast('先建班级');
   if (!kpAll().length) { UI.toast('先去「知识点库」添加知识点'); return; }
+  var clsOpts = (S.classes || []).map(function (x) { return '<option value="' + x.id + '"' + (x.id === c.id ? ' selected' : '') + '>' + esc(x.name) + '</option>'; }).join('');
   var subs = wrSubs();
   var opts = subs.map(function (sub) {
     return '<optgroup label="' + esc(sub) + '">' + kpOfSub(sub).map(function (k) { return '<option value="' + k.id + '">' + esc(k.name) + '</option>'; }).join('') + '</optgroup>';
   }).join('');
-  var studs = studentsOf(c.id).map(function (s) { return '<option value="' + s.id + '">' + esc(s.name) + (s.no ? '（' + esc(s.no) + '）' : '') + '</option>'; }).join('');
   UI.modal({
     title: '记一次作答',
-    body: '<div class="field"><label>学生</label><select class="sel" id="wrSid">' + studs + '</select></div>' +
+    body: '<div class="field"><label>班型</label><select class="sel" id="wrCls" data-chg="wr-cls">' + clsOpts + '</select></div>' +
+      '<div class="field"><label>学生</label><select class="sel" id="wrSid">' + wrStuOpts(c.id) + '</select></div>' +
       '<div class="field"><label>知识点</label><select class="sel" id="wrKp">' + opts + '</select></div>' +
+      '<div class="field"><label>关联考试 / 试卷（可不选）</label><select class="sel" id="wrExam">' + wrExamOpts(c.id) + '</select></div>' +
       '<div class="field"><label>这一次</label><div class="row2"><button class="btn btn-light" data-act="wr-save" data-ok="1">做对了</button><button class="btn btn-ghost" data-act="wr-save" data-ok="0">做错了</button></div></div>' +
       '<div class="muted" style="font-size:12.5px">做错就记一条错题；做对也记一条，掌握度才算得出来。</div>',
     foot: '<button class="btn btn-light" data-act="modal-close">关闭</button>'
@@ -8066,8 +8115,41 @@ UI.act['wr-add'] = function () {
 UI.act['wr-save'] = function (el) {
   var sid = ($('#wrSid') || {}).value, kp = ($('#wrKp') || {}).value, ok = el.getAttribute('data-ok') === '1';
   if (!sid || !kp) return;
-  S.mis.push({ id: uid(), sid: sid, kp: kp, ok: ok ? 1 : 0, at: Date.now() });
+  wrAddRec(sid, kp, ok, ($('#wrExam') || {}).value || '');
   save(); UI.closeModal(); UI.rerender(); UI.toast(ok ? '记了一次「做对」' : '记了一次错题');
+};
+
+UI.act['wr-ai'] = function (el) {
+  var sid = el.getAttribute('data-sid'), kp = kpById(el.getAttribute('data-kp')), st = stuById(sid);
+  if (!kp || !st) return;
+  var r = kpRate(sid, kp.id);
+  var prompt = '请给「' + st.name + '」出 3 道「' + kp.sub + ' · ' + kp.name + '」的补救练习。\n' +
+    '他的情况：最近 5 次正确率 ' + Math.round(r.s * 100) + '%，' + (r.n >= 3 && r.s < 0.9 ? '已经连续练了 ' + r.n + ' 次还没稳定。' : '刚记录不久。') + '\n' +
+    '要求：\n1. 难度从易到难，第 1 题只考最基础的概念，第 3 题接近考试难度；\n2. 每题给出答案和一句话思路，但答案放在最后统一列出；\n3. 不要出偏题怪题，紧扣「' + kp.name + '」。';
+  var ctx = isHrStu(st.id) ? [hrStudentContext(st)] : [studentContext(st)];
+  startChat({ title: '补救练习 · ' + kp.name, show: prompt, prompt: prompt, ctx: ctx, sid: st.id });
+};
+
+UI.act['wr-report'] = function (el) {
+  var st = stuById(el.getAttribute('data-sid')); if (!st) return;
+  var txt = wrReportText(st);
+  UI.modal({
+    title: '家长报告 · ' + st.name,
+    body: '<div class="field"><label>发给家长的话（可修改）</label><textarea class="ta" id="wrRep" style="min-height:210px">' + esc(txt) + '</textarea></div>' +
+      '<div class="muted" style="font-size:12.5px">已自动带上本周卡住的知识点和练习次数。点「复制」直接粘贴到微信。</div>',
+    foot: '<button class="btn btn-light" data-act="modal-close">关闭</button><button class="btn btn-light" data-act="wr-report-ai">让 AI 润色</button><button class="btn btn-dark" data-act="wr-report-copy">复制</button>',
+    wide: true
+  });
+};
+UI.act['wr-report-copy'] = function () {
+  var t = ($('#wrRep') || {}).value || '';
+  if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(t).then(function () { UI.toast('已复制，去微信粘贴'); }, function () { UI.toast('复制失败，请手动选中'); });
+  else UI.toast('当前浏览器不支持一键复制');
+};
+UI.act['wr-report-ai'] = function () {
+  var t = ($('#wrRep') || {}).value || '';
+  UI.closeModal();
+  startChat({ title: '家长报告润色', show: '把下面这份家长报告改得更口语、更有温度，不要夸张，保留所有数据和知识点：\n\n' + t, prompt: '把下面这份家长报告改得更口语、更有温度，不要夸张，保留所有数据和知识点：\n\n' + t });
 };
 
 UI.act['wr-kp'] = function () {
@@ -8113,6 +8195,156 @@ UI.act['wr-preset'] = function (el) {
   });
   save(); UI.closeModal(); UI.act['wr-kp']; if (UI.page === 'wrong') UI.rerender();
   UI.toast(add ? '已添加 ' + add + ' 个知识点' : '这些已经有了');
+};
+
+
+/* ===================== 本版修改：拍照识别错题，拆解入题库 ===================== */
+function bankList() { if (!Array.isArray(S.bank)) S.bank = []; return S.bank; }
+var SCAN = { sub: '数学', img: '', items: [], exam: '' };
+
+function imgShrink(file, max, cb) {
+  var fr = new FileReader();
+  fr.onload = function () {
+    var im = new Image();
+    im.onload = function () {
+      var w = im.width, h = im.height, k = Math.min(1, max / Math.max(w, h));
+      var cv = document.createElement('canvas');
+      cv.width = Math.round(w * k); cv.height = Math.round(h * k);
+      var cx = cv.getContext('2d');
+      cx.fillStyle = '#fff'; cx.fillRect(0, 0, cv.width, cv.height);
+      cx.drawImage(im, 0, 0, cv.width, cv.height);
+      cb(cv.toDataURL('image/jpeg', 0.86), file.name || '');
+    };
+    im.onerror = function () { cb('', ''); };
+    im.src = fr.result;
+  };
+  fr.onerror = function () { cb('', ''); };
+  fr.readAsDataURL(file);
+}
+
+function wrBankJSON(t) {
+  var BT = String.fromCharCode(96), F = BT + BT + BT;
+  var a = String(t || '').split(F).join('').replace(/^json/im, '');
+  var i = a.indexOf('['), j = a.lastIndexOf(']');
+  if (i < 0 || j <= i) return [];
+  try {
+    var arr = JSON.parse(a.slice(i, j + 1));
+    return Array.isArray(arr) ? arr.filter(function (x) { return x && (x.q || x.question); }) : [];
+  } catch (e) { return []; }
+}
+
+UI.chg['wr-file'] = function (el) {
+  var f = el.files && el.files[0];
+  if (!f) return;
+  if (!/^image\//.test(f.type)) { UI.toast('请选择图片文件'); return; }
+  UI.toast('处理图片…');
+  imgShrink(f, 1600, function (url) {
+    if (!url) { UI.toast('读取图片失败'); return; }
+    SCAN.img = url;
+    var pv = $('#scPrev'), st = $('#scStat');
+    if (pv) pv.innerHTML = '<img src="' + url + '" style="max-width:100%;max-height:280px;border-radius:10px;display:block;margin:0 auto">';
+    if (st) st.textContent = '图片已就绪，点「开始识别」';
+  });
+};
+
+UI.act['wr-scan'] = function () {
+  SCAN = { sub: '数学', img: '', items: [], exam: '' };
+  var subs = ['语文', '数学', '英语', '物理', '化学'];
+  kpAll().forEach(function (k) { if (subs.indexOf(k.sub) < 0) subs.push(k.sub); });
+  UI.modal({
+    title: '拍照录入错题',
+    wide: true,
+    body: '<div class="panel-sub" style="margin:-2px 0 12px">拍一张试卷或作业，AI 会挑出错题、拆出知识点，确认后存进题库。</div>' +
+      '<div class="row2"><label class="fld"><span>学科</span><select class="sel" id="scSub">' + subs.map(function (x) { return '<option' + (x === SCAN.sub ? ' selected' : '') + '>' + esc(x) + '</option>'; }).join('') + '</select></label>' +
+      '<label class="fld"><span>关联考试（可不选）</span><select class="sel" id="scExam"><option value="">不关联</option>' + (S.exams || []).map(function (e) { return '<option value="' + e.id + '">' + esc(e.name) + '</option>'; }).join('') + '</select></label></div>' +
+      '<label class="btn btn-light" style="cursor:pointer;margin:4px 0 10px">' + ICON.up + '选择图片<input type="file" accept="image/*" capture="environment" hidden data-chg="wr-file"></label>' +
+      '<div id="scPrev" class="muted" style="min-height:40px">还没有选择图片</div>' +
+      '<div id="scStat" class="muted" style="margin-top:10px"></div>',
+    foot: '<button class="btn btn-light" data-act="modal-close">取消</button><button class="btn btn-dark" data-act="wr-scan-go">开始识别</button>'
+  });
+};
+
+UI.act['wr-scan-go'] = function () {
+  if (!SCAN.img) { UI.toast('先选一张图片'); return; }
+  if (AIC.isClaude()) { UI.toast('当前是 Claude 接口，拍照识别暂只支持 OpenAI 兼容接口'); return; }
+  if (!AIC.ready()) { UI.toast('先在 设置 → AI 里填好接口、模型和 Key'); return; }
+  SCAN.sub = ($('#scSub') || {}).value || '数学';
+  SCAN.exam = ($('#scExam') || {}).value || '';
+  var st = $('#scStat'); if (st) st.textContent = '正在识别，通常 10–30 秒…';
+  var btn = document.querySelector('[data-act="wr-scan-go"]'); if (btn) { btn.disabled = true; btn.textContent = '识别中…'; }
+  var prompt = '你是教培机构的错题整理助手。请仔细看这张试卷/作业照片，找出学生做错的题（有明显红叉、扣分、圈改痕迹的；如果判断不了就把整页题目都列出来）。\n' +
+    '只输出严格的 JSON 数组，不要解释、不要 markdown。每项格式：\n' +
+    '{"q":"题干原文（可简写长题干，保留关键条件与数字）","kp":"对应知识点（初中常见名称，2-8 个字）","ans":"正确答案或解题关键（不超过 60 字）"}\n' +
+    '最多 12 条，按从上到下的顺序。';
+  AIC.stream([
+    { role: 'system', content: '你只输出 JSON 数组。' },
+    { role: 'user', content: [ { type: 'text', text: prompt }, { type: 'image_url', image_url: { url: SCAN.img } } ] }
+  ], function () {}, null, 2500).then(function (txt) {
+    var items = wrBankJSON(txt);
+    if (!items.length) { UI.toast('没识别出题目，换一张更清晰的照片试试'); if (btn) { btn.disabled = false; btn.textContent = '开始识别'; } if (st) st.textContent = '识别结果为空'; return; }
+    SCAN.items = items.map(function (x) { return { q: String(x.q || x.question || '').slice(0, 400), kp: String(x.kp || x.knowledge || '').slice(0, 20), ans: String(x.ans || x.answer || '').slice(0, 120), on: true }; });
+    UI.act['wr-scan-result']();
+  }).catch(function (e) {
+    if (st) st.textContent = '识别失败：' + (e && e.message ? e.message : '请检查模型是否支持图片输入');
+    if (btn) { btn.disabled = false; btn.textContent = '开始识别'; }
+  });
+};
+
+UI.act['wr-scan-result'] = function () {
+  var rows = SCAN.items.map(function (it, i) {
+    return '<tr><td style="width:34px"><input type="checkbox" ' + (it.on ? 'checked' : '') + ' data-chg="sc-on" data-i="' + i + '"></td>' +
+      '<td><textarea class="ta" rows="2" data-chg="sc-q" data-i="' + i + '">' + esc(it.q) + '</textarea></td>' +
+      '<td style="width:120px"><input class="inp" value="' + esc(it.kp) + '" data-chg="sc-kp" data-i="' + i + '" placeholder="知识点"></td>' +
+      '<td style="width:150px"><input class="inp" value="' + esc(it.ans) + '" data-chg="sc-ans" data-i="' + i + '" placeholder="答案/要点"></td></tr>';
+  }).join('');
+  UI.modal({
+    title: '识别结果 · ' + esc(SCAN.sub),
+    wide: true,
+    body: '<div class="panel-sub" style="margin:-2px 0 10px">确认题目与知识点，可改可删；取消勾选即不录入。</div>' +
+      '<div class="tbl-wrap"><table class="tbl"><thead><tr><th></th><th>题目</th><th>知识点</th><th>答案/要点</th></tr></thead><tbody>' + rows + '</tbody></table></div>',
+    foot: '<button class="btn btn-light" data-act="wr-scan">重新拍照</button><button class="btn btn-dark" data-act="wr-bank-save">存入题库</button>'
+  });
+};
+
+UI.chg['sc-on'] = function (el) { SCAN.items[+el.getAttribute('data-i')].on = el.checked; };
+UI.chg['sc-q'] = function (el) { SCAN.items[+el.getAttribute('data-i')].q = el.value; };
+UI.chg['sc-kp'] = function (el) { SCAN.items[+el.getAttribute('data-i')].kp = el.value; };
+UI.chg['sc-ans'] = function (el) { SCAN.items[+el.getAttribute('data-i')].ans = el.value; };
+
+UI.act['wr-bank-save'] = function () {
+  var sel = SCAN.items.filter(function (x) { return x.on && x.q.trim(); });
+  if (!sel.length) { UI.toast('没有勾选要录入的题目'); return; }
+  sel.forEach(function (x) {
+    bankList().push({ id: uid(), sub: SCAN.sub, kp: x.kp.trim() || '未分类', q: x.q.trim(), ans: x.ans.trim(), ex: SCAN.exam || '', at: Date.now() });
+  });
+  save(); UI.closeModal(); UI.toast('已存入题库 ' + sel.length + ' 道');
+  if (UI.page === 'wrong') UI.rerender();
+};
+
+UI.act['wr-bank'] = function () {
+  var list = bankList();
+  var body;
+  if (!list.length) body = '<div class="empty">题库还是空的。点「拍照录入」扫一张试卷，或者手动记错题。</div>';
+  else {
+    var bySub = {};
+    list.forEach(function (x) { (bySub[x.sub] = bySub[x.sub] || []).push(x); });
+    body = Object.keys(bySub).map(function (sub) {
+      return '<div class="panel-sub" style="margin:12px 0 6px">' + esc(sub) + ' · ' + bySub[sub].length + ' 道</div>' +
+        bySub[sub].slice().reverse().map(function (x) {
+          return '<div class="tl-item" style="display:flex;gap:10px;align-items:flex-start;padding:8px 0;border-bottom:1px solid var(--line)">' +
+            '<div style="flex:1;min-width:0"><div style="font-weight:600">' + esc(x.q.length > 90 ? x.q.slice(0, 90) + '…' : x.q) + '</div>' +
+            '<div class="muted" style="font-size:12px;margin-top:2px">' + esc(x.kp) + (x.ans ? ' · 答案：' + esc(x.ans) : '') + '</div></div>' +
+            '<button class="btn btn-xs btn-ghost" data-act="bank-del" data-bid="' + x.id + '">删除</button></div>';
+        }).join('');
+    }).join('');
+  }
+  UI.modal({ title: '错题题库 · ' + list.length + ' 道', wide: true, body: body, foot: '<button class="btn btn-light" data-act="modal-close">关闭</button>' });
+};
+
+UI.act['bank-del'] = function (el) {
+  var id = el.getAttribute('data-bid');
+  S.bank = bankList().filter(function (x) { return x.id !== id; });
+  save(); UI.act['wr-bank'];
 };
 
 UI.register('settings', {
