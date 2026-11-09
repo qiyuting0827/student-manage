@@ -1919,7 +1919,7 @@ var ART = (function () {
 /* =========================================================
    CORE · 工具函数、存储、数据模型（多班级）、示例数据、查询与统计
    ========================================================= */
-var VERSION = '2.8.6';
+var VERSION = '2.9.0';
 var STORE_KEY = 'bzr-workbench-v2';
 /* 旧版本的数据：v1.1 班主任工作台（单个班）、任课教师工作台。第一次打开 v2.0 时自动接过来，旧数据原样保留 */
 var LEGACY_KEYS = ['bzr-workbench-v1', 'rk-workbench-v1'];
@@ -2204,7 +2204,7 @@ function defaultState() {
       lastBackup: 0, onboarded: false, maskSeq: 0, cur: '',
       hr: '', subjects: subjectsPreset('初中'), hrNote: '', boardLeft: ''
     },
-    classes: [], tt: {}, changes: [], units: [], prog: {}, hw: [], exams: [], points: [], todos: [], chats: [], alumni: [],
+    classes: [], tt: {}, changes: [], units: [], prog: {}, hw: [], exams: [], points: [], todos: [], chats: [], alumni: [], kps: [], mis: [],
     attendance: {}, records: [], ctt: {}, duty: {}
   };
 }
@@ -2230,6 +2230,8 @@ function migrate(s) {
   /* 本版修改：积分宠物 */
   ['tt', 'prog', 'attendance', 'ctt', 'duty'].forEach(function (k) { if (!s[k] || typeof s[k] !== 'object' || Array.isArray(s[k])) s[k] = {}; });
   if (!Array.isArray(s.records)) s.records = [];
+  if (!Array.isArray(s.kps)) s.kps = [];
+  if (!Array.isArray(s.mis)) s.mis = [];
   s.records = s.records.filter(function (r) { return r && r.sid; });
   Object.keys(s.attendance).forEach(function (k) { if (!s.attendance[k] || typeof s.attendance[k] !== 'object') s.attendance[k] = {}; });
   if (!Array.isArray(s.settings.subjects) || !s.settings.subjects.length) s.settings.subjects = subjectsPreset(s.settings.stage);
@@ -3365,6 +3367,7 @@ var UI = {
       navItem('class', ICON.room, '课堂') +
       navItem('scores', ICON.edit, '成绩录入') +
       navItem('analysis', ICON.chart, '成绩分析') +
+      navItem('wrong', ICON.flag, '错题巩固') +
       navItem('students', ICON.users, '学生名单', allStudents().length) +
       navItem('ai', ICON.spark, 'AI 助手') +
       '</nav>' +
@@ -7925,6 +7928,192 @@ function hrFieldHTML(type, key, lab, pre) {
 var SetP = { sec: 'profile' };
 var DEV_MAIL = 'cyberdaddyleo@outlook.com';
 var SET_SECS = [['profile', '个人信息'], ['classes', '我教的班级'], ['homeroom', '全科与班级'], ['periods', '作息时间'], ['teach', '成绩线与点评'], ['ai', 'AI 接口'], ['data', '数据与备份'], ['about', '关于']];
+
+
+/* =========================================================
+   错题巩固 · 知识点掌握
+   掌握度算法借鉴 DeepTutor-AILearning 的 learning/mastery.py：
+   取最近 5 次作答，越近权重越高，加权正确率 ≥ 0.9 视为已掌握
+   ========================================================= */
+var KP_W = [0.5, 0.7, 0.85, 0.95, 1.0];
+var KP_PRESETS = {
+  '数学': ['有理数', '整式', '一元一次方程', '二元一次方程组', '不等式与不等式组', '平面图形', '三角形', '全等三角形', '轴对称', '实数', '一次函数', '数据的收集与整理'],
+  '语文': ['字音字形', '词语运用', '病句修改', '古诗文默写', '文言实词', '文言翻译', '现代文阅读', '名著阅读', '综合性学习', '作文'],
+  '英语': ['音标与发音', '词汇拼写', '语法填空', '时态', '从句', '完形填空', '阅读理解', '听力', '写作'],
+  '物理': ['声现象', '光现象', '透镜及其应用', '物态变化', '质量与密度', '力', '运动和力', '压强', '浮力', '功和机械能', '简单机械', '电流和电路'],
+  '化学': ['物质的变化和性质', '空气与氧气', '水与溶液', '化学方程式', '碳和碳的氧化物', '金属和金属材料', '酸碱盐', '化学实验']
+};
+var Wr = { sub: '' };
+
+function kpAll() { return S.kps || []; }
+function kpById(id) { var a = kpAll(); for (var i = 0; i < a.length; i++) if (a[i].id === id) return a[i]; return null; }
+function kpOfSub(sub) { return kpAll().filter(function (k) { return k.sub === sub; }); }
+function kpLogs(sid, kpId) {
+  return (S.mis || []).filter(function (m) { return m.sid === sid && m.kp === kpId; })
+    .sort(function (a, b) { return a.at - b.at; });
+}
+/* 掌握度：最近 5 次加权正确率 */
+function kpRate(sid, kpId) {
+  var all = kpLogs(sid, kpId), r = all.slice(-5);
+  if (!r.length) return { n: 0, s: 0, ok: 0 };
+  var w = KP_W.slice(5 - r.length), t = 0, d = 0, ok = 0;
+  r.forEach(function (m, i) { t += w[i] * (m.ok ? 1 : 0); d += w[i]; if (m.ok) ok++; });
+  return { n: all.length, s: t / d, ok: ok };
+}
+function kpState(r) {
+  if (!r.n) return { t: '未记录', c: 'var(--ink3)' };
+  if (r.s >= 0.9) return { t: '已掌握', c: '#1d9a57' };
+  if (r.n >= 3) return { t: '卡住了', c: '#d9363e' };
+  return { t: '巩固中', c: '#c7831a' };
+}
+function kpBar(r) {
+  var p = Math.round(r.s * 100);
+  return '<div style="display:flex;align-items:center;gap:8px;min-width:130px"><div style="flex:1;height:6px;border-radius:99px;background:var(--fill);overflow:hidden"><i style="display:block;height:100%;width:' + p + '%;border-radius:99px;background:' + (r.s >= 0.9 ? '#1d9a57' : r.s >= 0.6 ? '#c7831a' : '#d9363e') + '"></i></div><b class="num" style="font-size:12px">' + p + '%</b></div>';
+}
+function wrRows(cid) {
+  var out = [];
+  if (!cid) return out;
+  studentsOf(cid).forEach(function (st) {
+    kpAll().forEach(function (k) {
+      if (Wr.sub && k.sub !== Wr.sub) return;
+      var r = kpRate(st.id, k.id);
+      if (!r.n) return;
+      out.push({ st: st, k: k, r: r });
+    });
+  });
+  out.sort(function (a, b) { return a.r.s - b.r.s; });
+  return out;
+}
+function wrSubs() {
+  var m = {};
+  kpAll().forEach(function (k) { m[k.sub] = 1; });
+  return Object.keys(m);
+}
+
+UI.register('wrong', {
+  render: function (main) {
+    var c = curCls();
+    var rows = wrRows(c && c.id);
+    var stuck = rows.filter(function (x) { return x.r.s < 0.9 && x.r.n >= 3; });
+    var subs = wrSubs();
+    var total = rows.reduce(function (a, x) { return a + x.r.n; }, 0);
+    var h = '<div class="page scroll"><div class="page-head"><div><h1 class="page-title">错题巩固</h1><div class="page-desc">' +
+      (c ? esc(c.name) + ' · 记一次错题就多一份证据，最近 5 次加权正确率达到 90% 才算掌握' : '先建一个班级') + '</div></div><div class="grow"></div>' +
+      '<button class="btn btn-ghost" data-act="wr-kp">知识点库</button><button class="btn btn-dark" data-act="wr-add">' + ICON.plus + '记错题</button></div>' +
+      '<div class="kpis"><div class="kpi"><div class="k">本班记录</div><div class="v">' + total + '</div><div class="d muted">条作答</div></div>' +
+      '<div class="kpi"><div class="k">涉及知识点</div><div class="v">' + rows.length + '</div><div class="d muted">学生 × 知识点</div></div>' +
+      '<div class="kpi"><div class="k">卡住了</div><div class="v" style="color:' + (stuck.length ? '#d9363e' : 'inherit') + '">' + stuck.length + '</div><div class="d muted">≥3 次仍未掌握</div></div>' +
+      '<div class="kpi"><div class="k">已掌握</div><div class="v">' + rows.filter(function (x) { return x.r.s >= 0.9; }).length + '</div><div class="d muted">掌握度 ≥ 90%</div></div></div>' +
+      '<div class="filterbar"><div class="chips"><button class="' + (!Wr.sub ? 'on' : '') + '" data-act="wr-sub" data-sub="">全部科目</button>' +
+      subs.map(function (x) { return '<button class="' + (Wr.sub === x ? 'on' : '') + '" data-act="wr-sub" data-sub="' + esc(x) + '">' + esc(x) + '</button>'; }).join('') +
+      '</div></div>';
+    if (!kpAll().length) {
+      h += '<div class="empty">还没有知识点。点右上角「知识点库」，一键添加常用知识点，或自己补充。</div>';
+    } else if (!rows.length) {
+      h += '<div class="empty">还没有错题记录。点右上角「记错题」，选学生和知识点，记一次就能开始跟踪。</div>';
+    } else {
+      h += '<div class="tbl-wrap"><table class="tbl"><thead><tr><th>学生</th><th>知识点</th><th>科目</th><th>作答</th><th>掌握度</th><th>状态</th><th class="r">操作</th></tr></thead><tbody>';
+      rows.forEach(function (x) {
+        var st = kpState(x.r);
+        h += '<tr><td><div class="nm">' + stuAva(x.st, 26) + stuNmH(x.st) + '</div></td><td>' + esc(x.k.name) + '</td><td class="sub">' + esc(x.k.sub) + '</td>' +
+          '<td class="num">' + x.r.n + ' <span class="muted">/ 近5次中 ' + x.r.ok + ' 次对</span></td><td>' + kpBar(x.r) + '</td>' +
+          '<td><b style="color:' + st.c + ';font-weight:600">' + st.t + '</b></td>' +
+          '<td class="r"><span class="ops"><button class="btn btn-xs btn-light" data-act="wr-mark" data-sid="' + x.st.id + '" data-kp="' + x.k.id + '" data-ok="1">做对</button><button class="btn btn-xs btn-ghost" data-act="wr-mark" data-sid="' + x.st.id + '" data-kp="' + x.k.id + '" data-ok="0">做错</button></span></td></tr>';
+      });
+      h += '</tbody></table></div>';
+    }
+    if (stuck.length) {
+      h += '<div class="panel" style="margin-top:18px"><div class="panel-title">卡住的知识点</div><div class="panel-sub">连续记录 3 次以上仍未达到 90%，建议单独补讲</div><div class="mini-list">' +
+        stuck.slice(0, 12).map(function (x) {
+          return '<div class="mini-row"><div class="nm">' + stuAva(x.st, 24) + stuNmH(x.st) + '</div><span class="muted">' + esc(x.k.sub) + ' · ' + esc(x.k.name) + '</span><span class="grow"></span><b class="num">' + Math.round(x.r.s * 100) + '%</b></div>';
+        }).join('') + '</div></div>';
+    }
+    h += '</div>';
+    main.innerHTML = h;
+  }
+});
+
+UI.act['wr-sub'] = function (el) {
+  Wr.sub = el.getAttribute('data-sub') || '';
+  UI.rerender();
+};
+
+UI.act['wr-mark'] = function (el) {
+  var sid = el.getAttribute('data-sid'), kp = el.getAttribute('data-kp'), ok = el.getAttribute('data-ok') === '1';
+  if (!kpById(kp) || !stuById(sid)) return;
+  S.mis.push({ id: uid(), sid: sid, kp: kp, ok: ok ? 1 : 0, at: Date.now() });
+  save(); UI.rerender(); UI.toast(ok ? '记了一次「做对」' : '记了一次错题');
+};
+
+UI.act['wr-add'] = function () {
+  var c = curCls(); if (!c) return UI.toast('先建班级');
+  if (!kpAll().length) { UI.toast('先去「知识点库」添加知识点'); return; }
+  var subs = wrSubs();
+  var opts = subs.map(function (sub) {
+    return '<optgroup label="' + esc(sub) + '">' + kpOfSub(sub).map(function (k) { return '<option value="' + k.id + '">' + esc(k.name) + '</option>'; }).join('') + '</optgroup>';
+  }).join('');
+  var studs = studentsOf(c.id).map(function (s) { return '<option value="' + s.id + '">' + esc(s.name) + (s.no ? '（' + esc(s.no) + '）' : '') + '</option>'; }).join('');
+  UI.modal({
+    title: '记一次作答',
+    body: '<div class="field"><label>学生</label><select class="sel" id="wrSid">' + studs + '</select></div>' +
+      '<div class="field"><label>知识点</label><select class="sel" id="wrKp">' + opts + '</select></div>' +
+      '<div class="field"><label>这一次</label><div class="row2"><button class="btn btn-light" data-act="wr-save" data-ok="1">做对了</button><button class="btn btn-ghost" data-act="wr-save" data-ok="0">做错了</button></div></div>' +
+      '<div class="muted" style="font-size:12.5px">做错就记一条错题；做对也记一条，掌握度才算得出来。</div>',
+    foot: '<button class="btn btn-light" data-act="modal-close">关闭</button>'
+  });
+};
+
+UI.act['wr-save'] = function (el) {
+  var sid = ($('#wrSid') || {}).value, kp = ($('#wrKp') || {}).value, ok = el.getAttribute('data-ok') === '1';
+  if (!sid || !kp) return;
+  S.mis.push({ id: uid(), sid: sid, kp: kp, ok: ok ? 1 : 0, at: Date.now() });
+  save(); UI.closeModal(); UI.rerender(); UI.toast(ok ? '记了一次「做对」' : '记了一次错题');
+};
+
+UI.act['wr-kp'] = function () {
+  var subs = (S.settings.subjects || []).map(function (x) { return x.name; });
+  var h = '<div class="panel-sub" style="margin:-2px 0 12px">知识点按科目分组。可以直接添加自己的，也可以一键加常用知识点。</div>';
+  if (!kpAll().length) h += '<div class="empty" style="margin:6px 0 14px">还没有知识点</div>';
+  else {
+    var bySub = {};
+    kpAll().forEach(function (k) { (bySub[k.sub] = bySub[k.sub] || []).push(k); });
+    h += Object.keys(bySub).map(function (sub) {
+      return '<div style="margin-bottom:14px"><div style="font-weight:600;font-size:13px;margin-bottom:6px">' + esc(sub) + ' <span class="muted">' + bySub[sub].length + ' 个</span></div><div class="tags">' +
+        bySub[sub].map(function (k) { return '<span class="tag">' + esc(k.name) + ' <button class="btn btn-xs btn-ghost" data-act="wr-kp-del" data-kp="' + k.id + '" style="padding:0 4px;min-height:0">×</button></span>'; }).join('') + '</div></div>';
+    }).join('');
+  }
+  h += '<div class="field" style="margin-top:6px"><label>添加知识点</label><div class="row2"><select class="sel" id="wrNewSub">' +
+    subs.map(function (x) { return '<option>' + esc(x) + '</option>'; }).join('') + '</select><input class="inp" id="wrNewName" placeholder="如：一元二次方程"></div></div>' +
+    '<button class="btn btn-light" data-act="wr-kp-add">' + ICON.plus + '添加</button>' +
+    '<div style="margin-top:16px"><div style="font-weight:600;font-size:13px;margin-bottom:6px">一键添加常用知识点</div><div class="tags">' +
+    ['数学', '语文', '英语', '物理', '化学'].filter(function (x) { return subs.indexOf(x) >= 0; }).map(function (x) { return '<button class="btn btn-xs btn-light" data-act="wr-preset" data-sub="' + x + '">' + x + '（' + KP_PRESETS[x].length + '）</button>'; }).join('') +
+    '</div></div>';
+  UI.modal({ title: '知识点库', body: h, foot: '<button class="btn btn-light" data-act="modal-close">关闭</button>', wide: true });
+};
+
+UI.act['wr-kp-add'] = function () {
+  var sub = ($('#wrNewSub') || {}).value, nm = (($('#wrNewName') || {}).value || '').trim();
+  if (!sub || !nm) return UI.toast('先填知识点名称');
+  if (kpAll().some(function (k) { return k.sub === sub && k.name === nm; })) return UI.toast('这个知识点已经有了');
+  S.kps.push({ id: uid(), sub: sub, name: nm });
+  save(); UI.closeModal(); UI.act['wr-kp'](); UI.rerender(); UI.toast('已添加');
+};
+
+UI.act['wr-kp-del'] = function (el) {
+  var id = el.getAttribute('data-kp');
+  S.kps = kpAll().filter(function (k) { return k.id !== id; });
+  S.mis = (S.mis || []).filter(function (m) { return m.kp !== id; });
+  save(); UI.closeModal(); UI.act['wr-kp'](); UI.rerender();
+};
+
+UI.act['wr-preset'] = function (el) {
+  var sub = el.getAttribute('data-sub'), add = 0;
+  (KP_PRESETS[sub] || []).forEach(function (nm) {
+    if (!kpAll().some(function (k) { return k.sub === sub && k.name === nm; })) { S.kps.push({ id: uid(), sub: sub, name: nm }); add++; }
+  });
+  save(); UI.closeModal(); UI.act['wr-kp']; if (UI.page === 'wrong') UI.rerender();
+  UI.toast(add ? '已添加 ' + add + ' 个知识点' : '这些已经有了');
+};
 
 UI.register('settings', {
   render: function (main, opts) {
