@@ -1919,7 +1919,7 @@ var ART = (function () {
 /* =========================================================
    CORE · 工具函数、存储、数据模型（多班级）、示例数据、查询与统计
    ========================================================= */
-var VERSION = '2.9.4';
+var VERSION = '2.9.5';
 var STORE_KEY = 'bzr-workbench-v2';
 /* 旧版本的数据：v1.1 班主任工作台（单个班）、任课教师工作台。第一次打开 v2.0 时自动接过来，旧数据原样保留 */
 var LEGACY_KEYS = ['bzr-workbench-v1', 'rk-workbench-v1'];
@@ -2926,12 +2926,16 @@ function setHr(cid) {
 function exOwn(ex) { return ex.own !== false; }
 function exHasHr(ex) { var c = curCls(); return !!c && ex.cids.indexOf(c.id) >= 0; }
 function isHrFull(ex) { return (ex.subs || []).length > 0; }
-/* 全科科目：我教的科目（分项合计成一科）在前，其他科目在后 */
+/* 全科科目顺序：语文 → 数学 → 英语 → 物理 → 化学 → 其他 */
+var SUB_ORDER = ['语文', '数学', '英语', '物理', '化学'];
+function subOrderIdx(name) { var i = SUB_ORDER.indexOf(name); return i < 0 ? 99 : i; }
+/* 全科科目：我教的科目（分项合计成一科）与其他科目一起按固定顺序排 */
 function hrSubs(ex) {
   var out = [];
   var me = ownName();
   if (exOwn(ex)) out.push({ name: me, full: exFull(ex), own: true });
   (ex.subs || []).forEach(function (s) { if (subWeight(s.name) <= 0) return; if (!exOwn(ex) || s.name !== me) out.push({ name: s.name, full: s.full }); });
+  out.sort(function (a, b) { return subOrderIdx(a.name) - subOrderIdx(b.name); });
   return out;
 }
 function hrFull(ex) { return round1(sum(hrSubs(ex).filter(function (s) { return subWeight(s.name) > 0; }).map(function (s) { return s.full * subWeight(s.name); }))); }
@@ -6273,11 +6277,19 @@ function hrGridHTML(ex, many) {
   var h = '<div class="paste-hint">' + ICON.flag + '<span>这个班要录所有科目：' + (own ? esc(ownName()) + (multi ? '按分项录' : '') + '和' : '') + '其他 ' + subs.length + ' 科放在一张表里。从 Excel 复制一整块（按学号顺序、科目顺序和这里一样）点起始格子 <span class="kbd">Ctrl</span> + <span class="kbd">V</span> 就能填好。缺考填「缺」。</span></div>' +
     '<div class="tbl-wrap" style="max-height:calc(100vh - ' + (many ? 300 : 250) + 'px)"><table class="tbl grid-tbl" data-mode="hr"><thead><tr><th>学号</th><th>姓名</th><th style="width:72px">年级</th><th style="width:64px">班级</th>';
   var cols = [];
-  if (own) {
-    if (multi) ex.parts.forEach(function (p) { cols.push({ k: 'own', name: p.name, full: p.full, label: ownName() + '·' + p.name }); });
-    else cols.push({ k: 'own', name: ex.parts[0].name, full: ex.parts[0].full, label: ownName() });
-  }
-  subs.forEach(function (sb) { cols.push({ k: 'ss', name: sb.name, full: sb.full, label: sb.name }); });
+  /* 科目列顺序：语文 → 数学 → 英语 → 物理 → 化学 → 其他（我教的科目按其学科名参与排序） */
+  var groups = [];
+  if (own) groups.push({ own: true, idx: subOrderIdx(ownName()) });
+  subs.forEach(function (sb) { groups.push({ sb: sb, idx: subOrderIdx(sb.name) }); });
+  groups.sort(function (a, b) { return a.idx - b.idx; });
+  groups.forEach(function (g) {
+    if (g.own) {
+      if (multi) ex.parts.forEach(function (p) { cols.push({ k: 'own', name: p.name, full: p.full, label: ownName() + '·' + p.name }); });
+      else cols.push({ k: 'own', name: ex.parts[0].name, full: ex.parts[0].full, label: ownName() });
+      return;
+    }
+    cols.push({ k: 'ss', name: g.sb.name, full: g.sb.full, label: g.sb.name });
+  });
   h += cols.map(function (c) {
     var w = c.k === 'ss' ? subWeight(c.name) : 1;
     return '<th class="c' + (c.k === 'own' ? ' own-col' : '') + '">' + esc(c.label) + ' <small>' + c.full + (w !== 1 ? ' ×' + w : '') + '</small></th>';
@@ -7950,7 +7962,7 @@ function hrFieldHTML(type, key, lab, pre) {
    ========================================================= */
 var SetP = { sec: 'profile' };
 var DEV_MAIL = 'cyberdaddyleo@outlook.com';
-var SET_SECS = [['profile', '个人信息'], ['classes', '我教的班级'], ['homeroom', '全科与班级'], ['periods', '作息时间'], ['teach', '成绩线与点评'], ['ai', 'AI 接口'], ['data', '数据与备份'], ['about', '关于']];
+var SET_SECS = [['profile', '个人信息'], ['teach', '成绩线与点评'], ['ai', 'AI 接口'], ['data', '数据与备份'], ['about', '关于']];
 
 
 UI.register('settings', {
@@ -7976,7 +7988,7 @@ UI.inp['set'] = function (el) {
 };
 function renderSetBody() {
   var st = S.settings, h = '', el = $('#setBody'); if (!el) return;
-  if (SetP.sec === 'periods') usePeriodTpl(SetP.tplId || st.tplId || (curCls() && curCls().periodsId));
+  if (!SET_SECS.some(function (x) { return x[0] === SetP.sec; })) SetP.sec = 'profile';
   if (SetP.sec === 'profile') {
     var t = st.teacher;
     h += '<div class="panel set-sec"><div class="panel-title" style="margin-bottom:14px">我的形象</div><div class="gender-pick">' +
@@ -7987,50 +7999,6 @@ function renderSetBody() {
       '<div class="field"><label>年级</label>' + sInp('grade', st.grade, '如：初二') + '</div></div>' +
       '<div class="row3"><div class="field"><label>学期</label>' + sInp('term', st.term, '如：2026—2027 学年 第一学期') + '</div><div class="field"><label>开学日期</label>' + sInp('termStart', st.termStart, '', 'date') + '<div class="hint">用来算第几周、已上了多少节课</div></div><div class="field"><label>学期结束</label>' + sInp('termEnd', st.termEnd, '', 'date') + '<div class="hint">导出日历时，每周的课排到这一天</div></div></div>' +
       '<div class="row2"><div class="field"><label>倒计时名称</label>' + sInp('countdown.label', st.countdown.label, '如：期末考试 / 中考') + '</div><div class="field"><label>倒计时日期</label>' + sInp('countdown.date', st.countdown.date, '', 'date') + '<div class="hint">不在上课时间，教室智慧屏显示这个倒计时</div></div></div></div>';
-  } else if (SetP.sec === 'classes') {
-    h += '<div class="panel set-sec"><div style="display:flex;align-items:flex-start;gap:12px"><div><div class="panel-title">我教的班级</div><div class="panel-sub">点「设置」可以改桌椅排列（单人单列 / 双人同桌 / 三人一排）；圆点换颜色，颜色会用在课表、图表和班级标签上</div></div><span class="grow"></span><button class="btn btn-dark btn-sm" data-act="cls-new">' + ICON.plus + '新建班级</button></div>' +
-      (S.classes.length ? '<table class="tbl"><thead><tr><th style="width:44px">颜色</th><th>班级名称</th><th>教室</th><th>桌椅</th><th class="r">学生</th><th class="r">每周正课</th><th></th></tr></thead><tbody>' + S.classes.map(function (c, i) {
-        return '<tr><td><button class="cdot-btn" data-act="cls-color" data-id="' + c.id + '" title="换个颜色" style="background:' + clsColor(c) + '"></button></td>' +
-          '<td><input class="inp" style="height:32px" value="' + esc(c.name) + '" data-inp="cls-field" data-id="' + c.id + '" data-k="name" maxlength="20"></td><td><input class="inp" style="height:32px" value="' + esc(c.room || '') + '" data-inp="cls-field" data-id="' + c.id + '" data-k="room" placeholder="选填，排课时自动带上"></td>' +
-          '<td class="sub" style="white-space:nowrap">' + layoutText(c) + '</td><td class="r num"><a href="#" data-act="go" data-page="students" data-sec="' + c.id + '">' + c.students.length + ' 人</a></td><td class="r num">' + weeklyCount(c.id, '正课') + ' 节</td>' +
-          '<td class="r" style="white-space:nowrap"><button class="btn btn-xs btn-light" data-act="cls-edit" data-id="' + c.id + '">设置</button><button class="btn btn-xs btn-ghost" data-act="cls-move" data-id="' + c.id + '" data-d="-1"' + (i === 0 ? ' disabled' : '') + ' aria-label="上移">' + ICON.up + '</button><button class="btn btn-xs btn-ghost" data-act="cls-move" data-id="' + c.id + '" data-d="1"' + (i === S.classes.length - 1 ? ' disabled' : '') + ' aria-label="下移">' + ICON.down + '</button><button class="btn btn-xs btn-ghost" data-act="cls-del" data-id="' + c.id + '" style="color:var(--red)">删除</button></td></tr>';
-      }).join('') + '</tbody></table>' : '<div class="empty" style="padding:30px 0">还没有班级，点右上角「新建班级」</div>') + '</div>';
-  } else if (SetP.sec === 'homeroom') {
-    var hc = hrCls();
-    if (hc) {
-      h += '<div class="panel set-sec"><div class="panel-title">全科科目与满分</div><div class="panel-sub">新建考试时可以勾选这些科目一起录。你教的' + esc(ownName()) + '会自动带上，不用加在这里</div><div class="sub-list">' +
-        '<span class="sub-item" title="你教的科目，满分在新建考试时填"><b style="font-weight:600">' + esc(ownName()) + '</b><span class="tag blue" style="height:20px;font-size:11px;margin-right:4px">我教</span></span>' +
-        st.subjects.map(function (x, i) {
-          if (x.name === ownName()) return '';
-          return '<span class="sub-item" title="满分 · 折算系数">' + esc(x.name) +
-            '<input value="' + x.full + '" data-inp="set-sub-full" data-i="' + i + '" aria-label="' + esc(x.name) + '满分" title="满分">' +
-            '<span style="opacity:.55;font-size:11px">×</span>' +
-            '<input value="' + (typeof x.w === 'number' ? x.w : 1) + '" data-inp="set-sub-w" data-i="' + i + '" aria-label="' + esc(x.name) + '折算系数" title="计入总分的系数：0.9 打九折，0 表示不计入总分" style="width:36px">' +
-            '<button data-act="set-sub-del" data-i="' + i + '" aria-label="删除' + esc(x.name) + '">×</button></span>';
-        }).join('') + '</div>' +
-        '<div class="muted" style="font-size:12px;margin-top:8px">第二个数字是折算系数：物理 0.9、化学 0.6，语数英填 1；填 0 的科目不会出现在成绩表里。总分满分按「满分 × 系数」相加。</div>' +
-        '<div style="display:flex;gap:6px;margin-top:12px;flex-wrap:wrap"><input class="inp" id="newSub" placeholder="科目名" style="width:140px;height:32px" maxlength="8"><input class="inp num" id="newSubFull" value="100" style="width:72px;height:32px"><button class="btn btn-light btn-sm" data-act="set-sub-add">添加科目</button><button class="btn btn-ghost btn-sm" data-act="set-sub-preset">按' + esc(st.stage) + '重置</button></div></div>';
-    }
-  } else if (SetP.sec === 'periods') {
-    var tpls = st.periodTpls, tcur = periodTplById(st.tplId) || tpls[0], tusers = S.classes.filter(function (c) { return c.periodsId === tcur.id; });
-    h += '<div class="panel set-sec"><div class="panel-title">作息模板</div><div class="panel-sub">平时、周末、寒暑假可以各建一套。每个班在下面选自己用哪一套，课表时间和「上课中 · 还剩几分钟」都按它算</div>' +
-      '<div class="chips">' + tpls.map(function (t) { return '<button class="' + (t.id === tcur.id ? 'on' : '') + '" data-act="tpl-sel" data-id="' + t.id + '">' + esc(t.name) + ' <span style="font-size:11px;opacity:.6">' + t.periods.length + ' 节</span></button>'; }).join('') + '</div>' +
-      '<div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap;align-items:center"><input class="inp" id="tplName" value="' + esc(tcur.name) + '" style="height:32px;width:190px" maxlength="12" data-inp="tpl-name" aria-label="模板名称" placeholder="模板名称">' +
-      '<button class="btn btn-light btn-sm" data-act="tpl-add">' + ICON.plus + '新建</button><button class="btn btn-light btn-sm" data-act="tpl-copy">复制这套</button>' +
-      (tpls.length > 1 ? '<button class="btn btn-xs btn-ghost" data-act="tpl-del" style="color:var(--red)">删除这套</button>' : '') + '</div>' +
-      '<div class="muted" style="font-size:12px;margin-top:10px">' + (tusers.length ? '正在用「' + esc(tcur.name) + '」：' + tusers.map(function (c) { return esc(c.name); }).join('、') : '还没有班级用这套作息') + '</div></div>' +
-      '<div class="panel set-sec"><div class="panel-title">「' + esc(tcur.name) + '」的节次与时间</div><div class="panel-sub">课表里的每一行，以及「上课中 · 还剩几分钟」都按这里算</div>' +
-      '<div class="field"><label>每周上课</label><div class="chips">' + [[5, '周一至周五'], [6, '含周六'], [7, '含周日']].map(function (x) { return '<button class="' + (st.days === x[0] ? 'on' : '') + '" data-act="set-days" data-n="' + x[0] + '">' + x[1] + '</button>'; }).join('') + '</div></div>' +
-      '<table class="tbl" style="max-width:560px"><thead><tr><th>名称</th><th>开始</th><th>结束</th><th></th></tr></thead><tbody>' + st.periods.map(function (p, i) {
-        return '<tr><td><input class="inp" style="height:32px;width:130px" value="' + esc(p.name) + '" data-inp="per-field" data-i="' + i + '" data-k="name" maxlength="10"></td><td><input class="inp num" type="time" style="height:32px;width:120px" value="' + esc(p.start) + '" data-inp="per-field" data-i="' + i + '" data-k="start"></td><td><input class="inp num" type="time" style="height:32px;width:120px" value="' + esc(p.end) + '" data-inp="per-field" data-i="' + i + '" data-k="end"></td>' +
-          '<td class="r"><button class="btn btn-xs btn-ghost" data-act="per-del" data-i="' + i + '" style="color:var(--red)">删除</button></td></tr>';
-      }).join('') + '</tbody></table>' +
-      '<div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap;align-items:center"><button class="btn btn-light btn-sm" data-act="per-add">' + ICON.plus + '加一节</button><span class="muted" style="font-size:12px;margin-left:8px">按学段套用常见作息：</span>' + ['小学', '初中', '高中'].map(function (x) { return '<button class="btn btn-xs btn-ghost" data-act="per-preset" data-s="' + x + '">' + x + '</button>'; }).join('') + '</div>' +
-      '<div class="muted" style="margin-top:10px;font-size:12px">删除一节后，课表里这一节的安排也会去掉。早读、课后服务、晚自习也可以作为一节加进来。</div></div>' +
-      '<div class="panel set-sec"><div class="panel-title">每个班用哪套作息</div><div class="panel-sub">换模板后，这个班的课表按新模板的节次与时间显示，已有的安排按节次保留</div>' +
-      (S.classes.length ? '<table class="tbl" style="max-width:560px"><thead><tr><th>班级</th><th>作息模板</th></tr></thead><tbody>' + S.classes.map(function (c) {
-        return '<tr><td>' + esc(c.name) + '</td><td><select class="sel" data-chg="cls-tpl" data-id="' + c.id + '">' + tpls.map(function (t) { return '<option value="' + t.id + '"' + (c.periodsId === t.id ? ' selected' : '') + '>' + esc(t.name) + '</option>'; }).join('') + '</select></td></tr>';
-      }).join('') + '</tbody></table>' : '<div class="muted" style="font-size:12.5px">还没有班级</div>') + '</div>';
   } else if (SetP.sec === 'teach') {
     var thr = st.thr;
     h += '<div class="panel set-sec"><div class="panel-title">成绩线</div><div class="panel-sub">按满分的百分比计算，各学科、各年级按学校要求调整</div><div class="row3" style="max-width:520px">' +
@@ -8222,7 +8190,7 @@ UI.chg['restore'] = function (el) {
 UI.act['wipe'] = function () {
   UI.confirm('清空全部数据', '班级、学生、档案、课表、成绩、考勤、点评、AI 对话都会被删除，无法恢复。确定吗？', '清空', function () {
     var keep = { teacher: S.settings.teacher, ai: S.settings.ai };
-    S = defaultState(); S.settings.teacher = keep.teacher; S.settings.ai = keep.ai; S.settings.onboarded = true; save(true); UI.shell(); UI.go('settings', { sec: 'classes' }); UI.toast('已清空，先添加任教班级');
+    S = defaultState(); S.settings.teacher = keep.teacher; S.settings.ai = keep.ai; S.settings.onboarded = true; save(true); UI.shell(); UI.go('class'); UI.toast('已清空，在课堂页右上角「+」新建班级');
   }, true);
 };
 UI.act['exam-clear'] = function () {
