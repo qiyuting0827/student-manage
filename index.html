@@ -1919,7 +1919,7 @@ var ART = (function () {
 /* =========================================================
    CORE · 工具函数、存储、数据模型（多班级）、示例数据、查询与统计
    ========================================================= */
-var VERSION = '2.9.2';
+var VERSION = '2.9.3';
 var STORE_KEY = 'bzr-workbench-v2';
 /* 旧版本的数据：v1.1 班主任工作台（单个班）、任课教师工作台。第一次打开 v2.0 时自动接过来，旧数据原样保留 */
 var LEGACY_KEYS = ['bzr-workbench-v1', 'rk-workbench-v1'];
@@ -2592,8 +2592,32 @@ function curCls() {
   return c || null;
 }
 function byNo(a, b) { return String(a.no || '').localeCompare(String(b.no || ''), 'zh', { numeric: true }) || a.name.localeCompare(b.name, 'zh'); }
-function studentsOf(cid) { var c = clsById(cid); return c ? c.students.slice().sort(byNo) : []; }
-function studentsByNo() { return allStudents().slice().sort(byNo); }
+/* 本版修改：名单按「年级 → 班级 → 学号」排序，不再单纯按学号 */
+function gradeOrder(g) {
+  var m = { '六年级': 1, '七年级': 2, '八年级': 3, '九年级': 4 };
+  return m[g] || 99;
+}
+function sclassRank(v) {
+  var n = parseInt(String(v || '').replace(/[^0-9]/g, ''), 10);
+  return isNaN(n) ? 99 : n;
+}
+function byGrade(a, b) {
+  var ga = String(a.grade || ''), gb = String(b.grade || '');
+  if (ga !== gb) {
+    var d = gradeOrder(ga) - gradeOrder(gb);
+    if (d) return d;
+    return ga.localeCompare(gb, 'zh');
+  }
+  var sa = String(a.sclass || ''), sb = String(b.sclass || '');
+  if (sa !== sb) {
+    var e = sclassRank(sa) - sclassRank(sb);
+    if (e) return e;
+    return sa.localeCompare(sb, 'zh', { numeric: true });
+  }
+  return byNo(a, b);
+}
+function studentsOf(cid) { var c = clsById(cid); return c ? c.students.slice().sort(byGrade) : []; }
+function studentsByNo() { return allStudents().slice().sort(byGrade); }
 function stuClsName(sid) { var c = clsOfStu(sid); return c ? c.name : ''; }
 function pointsOf(sid) { var t = 0; S.points.forEach(function (p) { if (p.sid === sid) t += p.d; }); return t; }
 function weekNo(ds) {
