@@ -1919,7 +1919,7 @@ var ART = (function () {
 /* =========================================================
    CORE · 工具函数、存储、数据模型（多班级）、示例数据、查询与统计
    ========================================================= */
-var VERSION = '2.9.5';
+var VERSION = '2.9.6';
 var STORE_KEY = 'bzr-workbench-v2';
 /* 旧版本的数据：v1.1 班主任工作台（单个班）、任课教师工作台。第一次打开 v2.0 时自动接过来，旧数据原样保留 */
 var LEGACY_KEYS = ['bzr-workbench-v1', 'rk-workbench-v1'];
@@ -5188,8 +5188,7 @@ UI.register('students', {
   render: function (main, opts) {
     if (opts && opts.sec && clsById(opts.sec)) Stu.cid = opts.sec;
     else Stu.cid = (curCls() || {}).id || '';
-    var n = allStudents().length;
-    main.innerHTML = '<div class="page scroll"><div class="page-head"><div><h1 class="page-title">学生名单</h1><div class="page-desc">' + S.classes.length + ' 个班 · 共 ' + n + ' 人 · 每个班都有完整档案（家庭、联系人、生日等）</div></div><div class="grow"></div>' +
+    main.innerHTML = '<div class="page scroll"><div class="page-head"><div><h1 class="page-title">学生名单</h1><div class="page-desc" id="stuDesc">' + S.classes.length + ' 个班 · 共 ' + allStudents().length + ' 人 · 每个班都有完整档案（家庭、联系人、生日等）</div></div><div class="grow"></div>' +
       '<button class="btn btn-ghost" data-act="stu-cls-edit">' + ICON.gear + '班级设置</button><button class="btn btn-ghost" data-act="stu-nocheck">学号查重</button><button class="btn btn-ghost" data-act="stu-alumni">历史档案</button><button class="btn btn-ghost" data-act="stu-batch">批量改年级/班级</button><button class="btn btn-light" data-act="stu-join">' + ICON.userplus + '从其他班加入</button><button class="btn btn-light" data-act="stu-import">' + ICON.up + '批量导入</button><button class="btn btn-light" data-act="stu-export">' + ICON.down + '导出名单</button><button class="btn btn-dark" data-act="stu-add">' + ICON.userplus + '添加学生</button></div>' +
       '<div class="filterbar"><div class="chips" id="stuChips"></div><input class="inp" placeholder="在全部班级里搜姓名、学号、标签" value="' + esc(Stu.q) + '" data-inp="stu-q" id="stuQ" style="margin-left:auto"></div>' +
       '<div class="tbl-wrap" id="stuTbl"></div></div>';
@@ -5201,6 +5200,14 @@ Stu.renderTable = function () {
   chips.innerHTML = S.classes.map(function (c) { return '<button class="' + (!Stu.q && Stu.cid === c.id ? 'on' : '') + '" data-act="stu-cls" data-c="' + c.id + '"><i class="cdot" style="background:' + clsColor(c) + ';margin-right:6px;vertical-align:0"></i>' + esc(c.name) + (isHr(c.id) ? '<i class="hr-flag" style="margin:0 2px 0 4px">班</i>' : '') + ' <span style="opacity:.6">' + c.students.length + '</span></button>'; }).join('') + '<button class="chip-add" data-act="cls-new">' + ICON.plus + '新建班级</button>';
   var r = stuRows(Stu.cid), all = !!Stu.q;
   var c0 = clsById(Stu.cid), lat0 = c0 ? latestExam(c0.id) : null;
+  /* 顶部人数跟着当前班走（跨班共用的学生只算一份，但这里显示的是本班在册人数） */
+  var dsc = $('#stuDesc');
+  if (dsc) {
+    var uniq = allStudents().length, cn = c0 ? c0.students.length : 0;
+    dsc.textContent = Stu.q
+      ? '搜索结果 ' + r.list.length + ' 人（在全部 ' + S.classes.length + ' 个班里找）'
+      : (c0 ? '当前班「' + c0.name + '」' + cn + ' 人 · 全部 ' + S.classes.length + ' 个班 ' + uniq + ' 人' : S.classes.length + ' 个班 · 共 ' + uniq + ' 人');
+  }
   if (!all && c0 && isHr(c0.id)) { $('#stuTbl').innerHTML = hrStuTable(c0, r.list); return; }
   function th(k, t, cls) { return '<th class="sortable ' + (cls || '') + '" data-act="stu-sort" data-k="' + k + '">' + t + (Stu.sort === k ? (Stu.dir > 0 ? ' ↑' : ' ↓') : '') + '</th>'; }
   var h = '<table class="tbl"><thead><tr>' + th('no', '学号') + th('name', '姓名') + '<th style="width:72px">年级</th><th style="width:64px">班级</th>' + '<th>性别</th>' + (all ? '<th>班级</th>' : '') + '<th>标签</th>' + th('score', (lat0 && !all ? esc(lat0.name) : '最近考试'), 'r') + '<th class="r">班内名次</th>' + th('pts', '课堂积分', 'r') + '<th>备注</th><th></th></tr></thead><tbody>';
