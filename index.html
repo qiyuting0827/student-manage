@@ -1919,7 +1919,7 @@ var ART = (function () {
 /* =========================================================
    CORE · 工具函数、存储、数据模型（多班级）、示例数据、查询与统计
    ========================================================= */
-var VERSION = '2.9.6';
+var VERSION = '2.9.7';
 var STORE_KEY = 'bzr-workbench-v2';
 /* 旧版本的数据：v1.1 班主任工作台（单个班）、任课教师工作台。第一次打开 v2.0 时自动接过来，旧数据原样保留 */
 var LEGACY_KEYS = ['bzr-workbench-v1', 'rk-workbench-v1'];
@@ -3023,8 +3023,8 @@ function hrFailCount(ex, sid) {
   hrSubs(ex).forEach(function (s) { var v = hrVal(ex, sid, s); if (typeof v === 'number' && v < s.full * thr) n++; });
   return n;
 }
-function hrEntryProgress(ex) {
-  var c = hrCls(), n = 0, total = 0; if (!c) return { n: 0, total: 0 };
+function hrEntryProgress(ex, cid) {
+  var c = cid ? clsById(cid) : hrCls(), n = 0, total = 0; if (!c) return { n: 0, total: 0 };
   var subs = hrSubs(ex);
   c.students.forEach(function (s) { total++; if (subs.every(function (sb) { return hrVal(ex, s.id, sb) !== undefined; })) n++; });
   return { n: n, total: total };
@@ -6214,16 +6214,22 @@ UI.register('scores', {
     Sc.renderGrid();
   }
 });
-/* 录入进度：班主任班按全部科目算，其他班按我教的科目算 */
+/* 录入进度：跨班共用的学生只算一个人（分数按学号存一份） */
 function examProgress(ex) {
-  var n = 0, total = 0;
-  ex.cids.forEach(function (cid) {
-    var p = isHr(cid) && (isHrFull(ex) || !exOwn(ex)) ? hrEntryProgress(ex) : entryProgress(ex, cid);
-    n += p.n; total += p.total;
+  var seen = {}, ids = [];
+  (ex.cids || []).forEach(function (cid) {
+    studentsOf(cid).forEach(function (st) { if (!seen[st.id]) { seen[st.id] = 1; ids.push(st.id); } });
   });
-  return { n: n, total: total };
+  var allSub = !exOwn(ex) || isHrFull(ex), subs = hrSubs(ex), n = 0;
+  ids.forEach(function (sid) {
+    var ok = allSub
+      ? subs.every(function (sb) { return hrVal(ex, sid, sb) !== undefined; })
+      : ex.parts.every(function (p) { var r = ex.scores[sid]; return r && r[p.name] !== undefined && r[p.name] !== ''; });
+    if (ok) n++;
+  });
+  return { n: n, total: ids.length };
 }
-function clsProgress(ex, cid) { return isHr(cid) && (isHrFull(ex) || !exOwn(ex)) ? hrEntryProgress(ex) : entryProgress(ex, cid); }
+function clsProgress(ex, cid) { return isHr(cid) && (isHrFull(ex) || !exOwn(ex)) ? hrEntryProgress(ex, cid) : entryProgress(ex, cid); }
 Sc.renderGrid = function () {
   var ex = examById(Sc.exam), el = $('#scGrid'); if (!ex || !el) return;
   var cids = ex.cids.filter(function (c) { return clsById(c); });
