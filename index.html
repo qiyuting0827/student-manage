@@ -1919,7 +1919,7 @@ var ART = (function () {
 /* =========================================================
    CORE · 工具函数、存储、数据模型（多班级）、示例数据、查询与统计
    ========================================================= */
-var VERSION = '2.9.7';
+var VERSION = '2.9.8';
 var STORE_KEY = 'bzr-workbench-v2';
 /* 旧版本的数据：v1.1 班主任工作台（单个班）、任课教师工作台。第一次打开 v2.0 时自动接过来，旧数据原样保留 */
 var LEGACY_KEYS = ['bzr-workbench-v1', 'rk-workbench-v1'];
@@ -5164,7 +5164,7 @@ UI.act['ctt-print'] = function () {
 var Stu = { cid: '', q: '', sort: 'no', dir: 1, tab: 'overview' };
 
 function stuRows(cid) {
-  var q = Stu.q, list = q ? allStudents().filter(function (s) { return s.name.indexOf(q) >= 0 || String(s.no).indexOf(q) >= 0 || (s.tags || []).join(',').indexOf(q) >= 0; }) : studentsOf(cid);
+  var q = Stu.q, list = q ? allStudents().filter(function (s) { return s.name.indexOf(q) >= 0 || String(s.no).indexOf(q) >= 0 || (s.tags || []).join(',').indexOf(q) >= 0; }).sort(byGrade) : studentsOf(cid);
   var info = {};
   list.forEach(function (s) {
     var c = clsOfStu(s.id), lat = latestExam(c.id), ri = lat ? rankInfo(lat) : null, r = ri && ri.m[s.id];
@@ -5179,7 +5179,7 @@ function stuRows(cid) {
     if (k === 'score') { va = A.r ? -A.r.total / exFull(A.lat) : 9; vb = B.r ? -B.r.total / exFull(B.lat) : 9; }
     else if (k === 'pts') { va = -A.pts; vb = -B.pts; }
     else if (k === 'name') return a.name.localeCompare(b.name, 'zh') * dir;
-    else return byNo(a, b) * dir;
+    else return byGrade(a, b) * dir;
     return (va - vb) * dir;
   });
   return { list: list, info: info };
@@ -6685,12 +6685,13 @@ function hrStatsAll(ex) {
 function hrDetailAllHTML(ex) {
   var s = hrStatsAll(ex), thr = S.settings.thr, full = s.full, many = (ex.cids || []).length > 1;
   var h = '<div class="an-sub"><div><b>' + esc(ex.name) + '</b><span class="muted">' + esc(ex.date) + ' · ' + s.n + ' 人参考 · 满分 ' + full + '</span></div></div>';
-  h += '<div class="panel" style="margin-top:16px;padding:20px 0 6px"><div style="padding:0 20px"><div class="panel-title">成绩排名</div><div class="panel-sub">按级部排名排序（没填级部排名的排在最后）；后两列是你手填的班级名次、级部名次</div></div><div style="max-height:520px;overflow:auto"><table class="tbl"><thead><tr><th>名次</th><th>姓名</th><th>年级</th><th>班级</th><th class="r">总分</th><th class="r">班级名次</th><th class="r">级部名次</th></tr></thead><tbody>' +
+  h += '<div class="panel" style="margin-top:16px;padding:20px 0 6px"><div style="padding:0 20px"><div class="panel-title">成绩排名</div><div class="panel-sub">按年级、班级排序，同班内按级部排名（没填排最后）；后两列是你手填的班级名次、级部名次</div></div><div style="max-height:520px;overflow:auto"><table class="tbl"><thead><tr><th>序号</th><th>姓名</th><th>年级</th><th>班级</th><th class="r">总分</th><th class="r">班级名次</th><th class="r">级部名次</th></tr></thead><tbody>' +
     s.rows.slice().sort(function (a, b) {
+      var d = byGrade(stuById(a.sid), stuById(b.sid));
+      if (d) return d;
       var ga = rankGR(ex, a.sid), gb = rankGR(ex, b.sid);
       ga = ga === null ? 1e9 : ga; gb = gb === null ? 1e9 : gb;
-      if (ga !== gb) return ga - gb;
-      return b.total - a.total;
+      return ga - gb || b.total - a.total;
     }).map(function (r, i) {
       var st = stuById(r.sid), k = clsById(r.cid), cs = rankCS(ex, r.sid), gr = rankGR(ex, r.sid), low = r.total < thrLine(full, 'pass');
       return '<tr class="click" data-act="open-stu" data-sid="' + r.sid + '"><td class="num">' + (i + 1) + '</td><td><div class="nm">' + stuAva(st, 22) + stuNmH(st) + '</div></td>' + '<td class="sub">' + (st.grade ? esc(st.grade) : '<span class="muted">—</span>') + '</td>' + '<td class="sub">' + (st.sclass ? esc(st.sclass) : '<span class="muted">—</span>') + '</td>' +
@@ -6721,6 +6722,7 @@ function anCmpHTML(a, b) {
       cs1: cs1, cs2: cs2, dC: (cs1 !== null && cs2 !== null) ? cs1 - cs2 : null,
       gr1: gr1, gr2: gr2, dG: (gr1 !== null && gr2 !== null) ? gr1 - gr2 : null, sd: sd };
   }).filter(Boolean);
+  rows.sort(function (x, y) { return byGrade(x.st, y.st) || ((y.dT || 0) - (x.dT || 0)); });
   function moveOf(r) {
     if (r.dG !== null) return { v: r.dG, u: '级部', th: 10 };
     if (r.dC !== null) return { v: r.dC, u: '班级', th: 5 };
