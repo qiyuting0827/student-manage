@@ -1919,7 +1919,7 @@ var ART = (function () {
 /* =========================================================
    CORE · 工具函数、存储、数据模型（多班级）、示例数据、查询与统计
    ========================================================= */
-var VERSION = '2.9.10';
+var VERSION = '2.9.11';
 var STORE_KEY = 'bzr-workbench-v2';
 /* 旧版本的数据：v1.1 班主任工作台（单个班）、任课教师工作台。第一次打开 v2.0 时自动接过来，旧数据原样保留 */
 var LEGACY_KEYS = ['bzr-workbench-v1', 'rk-workbench-v1'];
@@ -5408,7 +5408,11 @@ UI.act['stu-save'] = function (el) {
     if (Stu.formSeat && Stu.formSeat.cid === to.id) { if (!to.seats) to.seats = {}; to.seats[d.id] = Stu.formSeat.key; } // 点哪个空座位加的，就坐哪
   } else {
     var from = clsOfStu(d.id), old = stuById(d.id);
-    if (old && old !== d) Object.keys(d).forEach(function (k) { old[k] = d[k]; });
+    if (old && old !== d) {
+      Object.keys(d).forEach(function (k) { old[k] = d[k]; });
+      /* 本版修改：移除头像后要真的从原记录里删掉，合并字段不会自动删除 */
+      if (!d.photo) delete old.photo;
+    }
     if (from !== to) {
       from.students = from.students.filter(function (x) { return x.id !== d.id; });
       if (from.seats) delete from.seats[d.id];
