@@ -1919,7 +1919,7 @@ var ART = (function () {
 /* =========================================================
    CORE · 工具函数、存储、数据模型（多班级）、示例数据、查询与统计
    ========================================================= */
-var VERSION = '2.9.8';
+var VERSION = '2.9.9';
 var STORE_KEY = 'bzr-workbench-v2';
 /* 旧版本的数据：v1.1 班主任工作台（单个班）、任课教师工作台。第一次打开 v2.0 时自动接过来，旧数据原样保留 */
 var LEGACY_KEYS = ['bzr-workbench-v1', 'rk-workbench-v1'];
@@ -5171,7 +5171,11 @@ function stuRows(cid) {
     var pe = lat ? prevExam(lat, c.id) : null, pri = pe ? rankInfo(pe) : null, pr = pri && pri.m[s.id];
     if (r && r.cranks && r.cranks[c.id] !== undefined) r = Object.assign({}, r, { crank: r.cranks[c.id] });
     if (pr && pr.cranks && pr.cranks[c.id] !== undefined) pr = Object.assign({}, pr, { crank: pr.cranks[c.id] });
-    info[s.id] = { c: c, lat: lat, r: r, ch: r && pr ? pr.crank - r.crank : null, pts: pointsOf(s.id) };
+    /* 名为准：成绩录入里手填的班级名次优先，没填才用自动算的 */
+    var mcs = lat ? rankCS(lat, s.id) : null, pcs = pe ? rankCS(pe, s.id) : null;
+    info[s.id] = { c: c, lat: lat, r: r, cs: mcs,
+      ch: (mcs !== null || pcs !== null) ? ((mcs !== null && pcs !== null) ? pcs - mcs : null) : (r && pr ? pr.crank - r.crank : null),
+      pts: pointsOf(s.id) };
   });
   var k = Stu.sort, dir = Stu.dir;
   list.sort(function (a, b) {
@@ -5218,7 +5222,7 @@ Stu.renderTable = function () {
       (all ? '<td><span class="ctag"><i class="cdot" style="background:' + clsColor(x.c) + '"></i>' + esc(x.c.name) + '</span></td>' : '') +
       '<td><div class="tags">' + (s.tags || []).slice(0, 3).map(function (t) { return '<span class="tag">' + esc(t) + '</span>'; }).join('') + '</div></td>' +
       '<td class="r num">' + (x.r ? fmtNum(x.r.total, 1) + '<span class="muted" style="font-size:11.5px"> /' + exFull(x.lat) + '</span>' : x.lat && stuAbsent(x.lat, s.id) ? '<span class="tag amber">缺考</span>' : '<span class="muted">—</span>') + '</td>' +
-      '<td class="r num">' + (x.r ? x.r.crank : '—') + (x.ch ? ' <span class="' + (x.ch > 0 ? 'up' : 'dn') + '" style="font-size:12px">' + (x.ch > 0 ? '↑' + x.ch : '↓' + (-x.ch)) + '</span>' : '') + '</td>' +
+      '<td class="r num">' + (x.cs !== null && x.cs !== undefined ? x.cs : (x.r ? x.r.crank : '—')) + (x.ch ? ' <span class="' + (x.ch > 0 ? 'up' : 'dn') + '" style="font-size:12px">' + (x.ch > 0 ? '↑' + x.ch : '↓' + (-x.ch)) + '</span>' : '') + '</td>' +
       '<td class="r num">' + (x.pts > 0 ? '+' : '') + x.pts + '</td>' +
       '<td class="sub" style="max-width:220px;overflow:hidden;text-overflow:ellipsis">' + esc(s.note || '') + '</td>' +
       '<td class="r"><span class="ops"><button class="btn btn-xs btn-ghost" data-act="stu-edit" data-sid="' + s.id + '">编辑</button></span></td></tr>';
@@ -5975,7 +5979,7 @@ function hrStuTable(c, list) {
       '<td>' + (s.role ? '<span class="tag gray">' + esc(s.role) + '</span>' : '<span class="muted">—</span>') + '</td>' +
       '<td><div class="tags">' + (s.tags || []).slice(0, 3).map(function (t) { return '<span class="tag">' + esc(t) + '</span>'; }).join('') + ((s.tags || []).length > 3 ? '<span class="tag gray">+' + (s.tags.length - 3) + '</span>' : '') + '</div></td>' +
       '<td class="r num">' + (x ? fmtNum(x.total, 1) + '<span class="muted" style="font-size:11.5px"> /' + hrFull(lat) + '</span>' : '<span class="muted">—</span>') + '</td>' +
-      '<td class="r num">' + (x ? x.rank : '—') + (ch ? ' <span class="' + (ch > 0 ? 'up' : 'dn') + '" style="font-size:12px">' + (ch > 0 ? '↑' + ch : '↓' + (-ch)) + '</span>' : '') + '</td>' +
+      '<td class="r num">' + (function () { var mc = lat ? rankCS(lat, s.id) : null; return mc !== null ? mc : (x ? x.rank : '—'); })() + (ch ? ' <span class="' + (ch > 0 ? 'up' : 'dn') + '" style="font-size:12px">' + (ch > 0 ? '↑' + ch : '↓' + (-ch)) + '</span>' : '') + '</td>' +
       '<td class="r num">' + (pts > 0 ? '+' : '') + pts + '</td>' +
       '<td>' + (a ? '<span class="tag ' + ATT[a].tone + '">' + ATT[a].t + '</span>' : '<span class="muted">在校</span>') + '</td>' +
       '<td class="sub">' + (bd ? (bd.getMonth() + 1) + '月' + bd.getDate() + '日' + (bdd !== null && bdd <= 7 ? ' <span class="tag amber" style="height:18px;font-size:11px">' + (bdd === 0 ? '今天' : bdd + ' 天后') + '</span>' : '') : '<span class="muted">—</span>') + '</td>' +
