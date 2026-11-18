@@ -1919,7 +1919,7 @@ var ART = (function () {
 /* =========================================================
    CORE · 工具函数、存储、数据模型（多班级）、示例数据、查询与统计
    ========================================================= */
-var VERSION = '2.10.0';
+var VERSION = '2.11.0';
 var STORE_KEY = 'bzr-workbench-v2';
 /* 旧版本的数据：v1.1 班主任工作台（单个班）、任课教师工作台。第一次打开 v2.0 时自动接过来，旧数据原样保留 */
 var LEGACY_KEYS = ['bzr-workbench-v1', 'rk-workbench-v1'];
@@ -8195,87 +8195,153 @@ function syncCfg() {
   return st.sync;
 }
 var syncTimer = null, syncBusy = false, syncQuiet = false;
-function syncApi(method, path, body) {
+
+/* 云端同步（Netlify + Supabase）：数据用「同步码」派生密钥加密后存 Supabase */
+function syncCfg() {
+  if (!S.settings.sync) S.settings.sync = { url: '', key: '', code: '', auto: false, last: 0 };
+  var c = S.settings.sync;
+  if (c.url === undefined) c.url = '';
+  if (c.key === undefined) c.key = '';
+  if (c.code === undefined) c.code = '';
+  if (c.auto === undefined) c.auto = false;
+  if (c.last === undefined) c.last = 0;
+  return c;
+}
+function syncBase() {
   var c = syncCfg();
-  if (!c.token) return Promise.reject(new Error('请先填 GitHub Token'));
-  return fetch('https://api.github.com' + path, {
-    method: method,
-    headers: {
-      'Authorization': 'Bearer ' + c.token,
-      'Accept': 'application/vnd.github+json',
-      'Content-Type': 'application/json'
-    },
-    body: body ? JSON.stringify(body) : undefined
+  if (!c.url || !c.key) throw new Error('请先填 Supabase 地址和 anon key');
+  return c.url.replace(/\/+$/, '');
+}
+function syncReq(method, path, body) {
+  var c = syncCfg();
+  var h = {
+    'apikey': c.key,
+    'Authorization': 'Bearer ' + c.key,
+    'Content-Type': 'application/json'
+  };
+  if (method !== 'GET') h['Prefer'] = 'resolution=merge-duplicates,return=minimal';
+  return fetch(syncBase() + path, {
+    method: method, headers: h, body: body ? JSON.stringify(body) : undefined
   }).then(function (r) {
     return r.text().then(function (t) {
       var j = null; try { j = JSON.parse(t); } catch (e) { }
-      if (!r.ok) throw new Error((j && j.message) || ('HTTP ' + r.status));
+      if (!r.ok) throw new Error((j && (j.message || j.hint || j.error_description)) || ('HTTP ' + r.status));
       return j;
     });
   });
 }
+
+/* 8 位同步码，去掉容易看错的 0/o/1/l/i */
+function syncCodeNew() {
+  var a = 'abcdefghjkmnpqrstuvwxyz23456789', s = '';
+  for (var i = 0; i < 8; i++) s += a.charAt(Math.floor(Math.random() * a.length));
+  return s;
+}
+function syncKeyOf(code) {
+  var enc = new TextEncoder();
+  return crypto.subtle.importKey('raw', enc.encode(String(code)), 'PBKDF2', false, ['deriveKey'])
+    .then(function (base) {
+      return crypto.subtle.deriveKey(
+        { name: 'PBKDF2', salt: enc.encode('lezhituoguan-sync-v1'), iterations: 120000, hash: 'SHA-256' },
+        base, { name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt']);
+    });
+}
+function b64(buf) {
+  var b = new Uint8Array(buf), s = '';
+  for (var i = 0; i < b.length; i++) s += String.fromCharCode(b[i]);
+  return btoa(s);
+}
+function b64d(str) {
+  var s = atob(str), b = new Uint8Array(s.length);
+  for (var i = 0; i < s.length; i++) b[i] = s.charCodeAt(i);
+  return b;
+}
+function syncEnc(text) {
+  var code = syncCfg().code;
+  if (!code) return Promise.reject(new Error('请先设置同步码'));
+  return syncKeyOf(code).then(function (k) {
+    var iv = crypto.getRandomValues(new Uint8Array(12));
+    return crypto.subtle.encrypt({ name: 'AES-GCM', iv: iv }, k, new TextEncoder().encode(text))
+      .then(function (ct) { return JSON.stringify({ iv: b64(iv), ct: b64(ct) }); });
+  });
+}
+function syncDec(str) {
+  var code = syncCfg().code;
+  return syncKeyOf(code).then(function (k) {
+    var o = JSON.parse(str);
+    return crypto.subtle.decrypt({ name: 'AES-GCM', iv: b64d(o.iv) }, k, b64d(o.ct))
+      .then(function (pt) { return new TextDecoder().decode(pt); });
+  });
+}
+
 function syncPush(silent) {
   if (syncBusy) return Promise.resolve();
   syncBusy = true;
   var c = syncCfg();
   var payload = JSON.stringify({ app: 'lezhituoguan', v: VERSION, at: Date.now(), data: S });
-  var files = { 'lezhituoguan-data.json': { content: payload } };
-  var p = c.gist
-    ? syncApi('PATCH', '/gists/' + c.gist, { files: files })
-    : syncApi('POST', '/gists', { description: '乐智托管数据（云端同步）', public: false, files: files });
-  return p.then(function (g) {
-    c.gist = g.id; c.last = Date.now();
+  return syncEnc(payload).then(function (enc) {
+    return syncReq('POST', '/rest/v1/sync?on_conflict=code', [{ code: c.code, payload: enc }]);
+  }).then(function () {
+    c.last = Date.now();
     syncQuiet = true; save(true); syncQuiet = false;
     if (window.UI) {
       if (!silent) UI.toast('已上传到云端');
       var st = document.getElementById('syncStat');
       if (st) st.textContent = '上次同步：' + fmtTime(c.last) + '（' + (payload.length / 1024).toFixed(0) + ' KB）';
     }
-    return g;
   }).catch(function (e) {
     if (window.UI && !silent) UI.toast('上传失败：' + e.message, 4200);
     throw e;
   }).then(function (r) { syncBusy = false; return r; }, function (e) { syncBusy = false; throw e; });
 }
+
 function syncApplyText(txt) {
   var j; try { j = JSON.parse(txt); } catch (e) { throw new Error('云端数据不是合法 JSON'); }
   var d = j && j.data ? j.data : j;
   S = migrate(d); save(true);
   UI.toast('已从云端恢复'); UI.go('class');
 }
+
 function syncPull() {
   var c = syncCfg();
-  if (!c.gist) { UI.toast('还没有 Gist，先点一次「上传到云端」'); return; }
+  if (!c.code) { UI.toast('请先填同步码'); return; }
   UI.confirm('从云端恢复', '会用云端的数据覆盖这台设备上的全部数据，确定吗？<br>建议先导出一次本地备份。', '覆盖并恢复', function () {
-    syncApi('GET', '/gists/' + c.gist).then(function (g) {
-      var files = g.files || {}, key = files['lezhituoguan-data.json'] ? 'lezhituoguan-data.json' : Object.keys(files)[0];
-      var f = files[key];
-      if (!f) throw new Error('云端没有数据文件');
-      if (f.content) { syncApplyText(f.content); return; }
-      if (f.truncated && f.raw_url) return fetch(f.raw_url).then(function (r) { return r.text(); }).then(syncApplyText);
-      throw new Error('读不到云端数据');
-    }).catch(function (e) { UI.toast('恢复失败：' + e.message, 4200); });
+    syncReq('GET', '/rest/v1/sync?code=eq.' + encodeURIComponent(c.code) + '&select=payload,updated_at')
+      .then(function (rows) {
+        if (!rows || !rows.length) throw new Error('没有找到这个同步码，先在第一台设备上传一次');
+        return syncDec(rows[0].payload);
+      })
+      .then(syncApplyText)
+      .catch(function (e) { UI.toast('恢复失败：' + e.message, 4200); });
   });
 }
+
 function syncPanelHTML() {
   var c = syncCfg();
   return '<div class="panel set-sec"><div class="panel-title">云端同步</div>' +
-    '<div class="panel-sub">把整份数据存到你自己的 GitHub 私密 Gist，换手机、换电脑不用再导备份文件。需要一个个人的 GitHub Token（只勾 gist 权限），它只保存在这台设备的浏览器里。</div>' +
-    '<div class="field"><label>GitHub Token</label><input class="inp" type="password" data-inp="sync-token" placeholder="ghp_... 或 github_pat_..." value="' + esc(c.token) + '"><div class="hint">在 github.com/settings/tokens 新建，只勾选 gist；不会发给别人。导出备份时会带上，请勿外传备份文件</div></div>' +
-    '<div class="field"><label>Gist ID</label><input class="inp" data-inp="sync-gist" placeholder="留空则第一次上传时自动创建" value="' + esc(c.gist) + '"></div>' +
+    '<div class="panel-sub">把整份数据加密后存到您自己的 Supabase 数据库，换手机、换电脑输入同一个同步码就能恢复。同步码只存在设备上，忘了就找不回来。</div>' +
+    '<div class="field"><label>Supabase 地址</label><input class="inp" data-inp="sync-url" placeholder="https://xxxx.supabase.co" value="' + esc(c.url) + '"></div>' +
+    '<div class="field"><label>Supabase anon key</label><input class="inp" type="password" data-inp="sync-key" placeholder="eyJhbGciOi..." value="' + esc(c.key) + '"><div class="hint">在 Supabase → Project Settings → API 里复制 anon public key</div></div>' +
+    '<div class="field"><label>同步码</label><div style="display:flex;gap:8px"><input class="inp" data-inp="sync-code" placeholder="8 位字母数字" value="' + esc(c.code) + '" style="flex:1"><button class="btn btn-light" data-act="sync-code-new">生成</button></div><div class="hint">多台设备填同一个同步码即可共用一份数据</div></div>' +
     '<label class="chk" style="margin:6px 0 2px"><input type="checkbox" data-chg="sync-auto"' + (c.auto ? ' checked' : '') + '>每次保存后自动上传（只上传，不自动下载）</label>' +
     '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px"><button class="btn btn-dark" data-act="sync-up">上传到云端</button><button class="btn btn-light" data-act="sync-down">从云端恢复</button></div>' +
     '<div class="hint" id="syncStat" style="margin-top:8px">' + (c.last ? '上次同步：' + fmtTime(c.last) : '还没有同步过') + '</div></div>';
 }
-UI.inp['sync-token'] = function (el) { syncCfg().token = el.value.trim(); save(); };
-UI.inp['sync-gist'] = function (el) { syncCfg().gist = el.value.trim().replace(/^.*gists\//, ''); save(); };
+UI.inp['sync-url'] = function (el) { syncCfg().url = el.value.trim(); save(); };
+UI.inp['sync-key'] = function (el) { syncCfg().key = el.value.trim(); save(); };
+UI.inp['sync-code'] = function (el) { syncCfg().code = el.value.trim().toLowerCase(); save(); };
+UI.act['sync-code-new'] = function () {
+  var c = syncCfg(); c.code = syncCodeNew(); save();
+  var el = document.querySelector('[data-inp="sync-code"]'); if (el) el.value = c.code;
+  UI.toast('已生成同步码：' + c.code + '（请记下来）', 5000);
+};
 UI.chg['sync-auto'] = function (el) { syncCfg().auto = el.checked; save(); UI.toast(el.checked ? '已开启自动上传' : '已关闭自动上传'); };
 UI.act['sync-up'] = function () { syncPush(false).catch(function () { }); };
 UI.act['sync-down'] = syncPull;
 window.SYNC_AUTO = function () {
   if (syncQuiet) return;
   var c = syncCfg();
-  if (!c.auto || !c.token) return;
+  if (!c.auto || !c.code || !c.url || !c.key) return;
   clearTimeout(syncTimer);
   syncTimer = setTimeout(function () { syncPush(true).catch(function () { }); }, 8000);
 };
