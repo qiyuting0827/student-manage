@@ -1919,7 +1919,7 @@ var ART = (function () {
 /* =========================================================
    CORE · 工具函数、存储、数据模型（多班级）、示例数据、查询与统计
    ========================================================= */
-var VERSION = '2.9.11';
+var VERSION = '2.10.0';
 var STORE_KEY = 'bzr-workbench-v2';
 /* 旧版本的数据：v1.1 班主任工作台（单个班）、任课教师工作台。第一次打开 v2.0 时自动接过来，旧数据原样保留 */
 var LEGACY_KEYS = ['bzr-workbench-v1', 'rk-workbench-v1'];
@@ -2134,6 +2134,7 @@ function save(now) {
   var run = function () {
     var ok = Store.set(STORE_KEY, JSON.stringify(S));
     if (!ok && window.UI) UI.toast('存储空间不足，请到设置里导出备份');
+    if (ok && window.SYNC_AUTO) window.SYNC_AUTO();
   };
   if (now) run(); else saveTimer = setTimeout(run, 250);
 }
@@ -8056,6 +8057,7 @@ function renderSetBody() {
       '<div class="k">上次备份</div><div>' + (st.lastBackup ? fmtTime(st.lastBackup) : '<span class="dn">还没有备份过</span>') + '</div>' +
       '<div class="k">存储状态</div><div>' + (Store.ok() ? '正常' : '<span class="dn">浏览器禁止了本地存储，关闭页面后数据会丢失，请及时导出备份</span>') + '</div></div>' +
       '<div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn btn-dark" data-act="backup">' + ICON.down + '导出备份</button><label class="btn btn-light" style="cursor:pointer">' + ICON.up + '从备份恢复<input type="file" accept=".json" hidden data-chg="restore"></label></div></div>' +
+      syncPanelHTML() +
       '<div class="panel set-sec"><div class="panel-title">重新开始</div><div class="panel-sub">以下操作会覆盖当前数据，建议先导出备份</div><div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn btn-light" data-act="exam-clear" style="color:var(--red)">' + ICON.trash + '删除全部考试</button><button class="btn btn-light" data-act="wipe" style="color:var(--red)">' + ICON.trash + '清空全部数据</button></div></div>';
   } else if (SetP.sec === 'about') {
     h += '<div class="panel set-sec"><div style="display:flex;gap:14px;align-items:center">' + brandMark().replace('class="brand-mark"', 'class="brand-mark" style="width:52px;height:52px"') + '<div><div style="font-size:18px;font-weight:700">乐智托管</div><div class="muted" style="font-size:13px">个人工作台系列 · 第 1 期 · v' + VERSION + '</div></div></div>' +
@@ -8183,6 +8185,101 @@ UI.act['ai-test'] = function () {
   }).catch(function (e) { r.innerHTML = '<span class="dn" style="white-space:pre-line">' + esc(e.message) + '</span>'; });
 };
 /* 数据 */
+
+/* =========================================================
+   云端同步：GitHub Gist（可选，用户自己填 Token）
+   ========================================================= */
+function syncCfg() {
+  var st = S.settings;
+  if (!st.sync || typeof st.sync !== 'object') st.sync = { token: '', gist: '', auto: false, last: 0 };
+  return st.sync;
+}
+var syncTimer = null, syncBusy = false, syncQuiet = false;
+function syncApi(method, path, body) {
+  var c = syncCfg();
+  if (!c.token) return Promise.reject(new Error('请先填 GitHub Token'));
+  return fetch('https://api.github.com' + path, {
+    method: method,
+    headers: {
+      'Authorization': 'Bearer ' + c.token,
+      'Accept': 'application/vnd.github+json',
+      'Content-Type': 'application/json'
+    },
+    body: body ? JSON.stringify(body) : undefined
+  }).then(function (r) {
+    return r.text().then(function (t) {
+      var j = null; try { j = JSON.parse(t); } catch (e) { }
+      if (!r.ok) throw new Error((j && j.message) || ('HTTP ' + r.status));
+      return j;
+    });
+  });
+}
+function syncPush(silent) {
+  if (syncBusy) return Promise.resolve();
+  syncBusy = true;
+  var c = syncCfg();
+  var payload = JSON.stringify({ app: 'lezhituoguan', v: VERSION, at: Date.now(), data: S });
+  var files = { 'lezhituoguan-data.json': { content: payload } };
+  var p = c.gist
+    ? syncApi('PATCH', '/gists/' + c.gist, { files: files })
+    : syncApi('POST', '/gists', { description: '乐智托管数据（云端同步）', public: false, files: files });
+  return p.then(function (g) {
+    c.gist = g.id; c.last = Date.now();
+    syncQuiet = true; save(true); syncQuiet = false;
+    if (window.UI) {
+      if (!silent) UI.toast('已上传到云端');
+      var st = document.getElementById('syncStat');
+      if (st) st.textContent = '上次同步：' + fmtTime(c.last) + '（' + (payload.length / 1024).toFixed(0) + ' KB）';
+    }
+    return g;
+  }).catch(function (e) {
+    if (window.UI && !silent) UI.toast('上传失败：' + e.message, 4200);
+    throw e;
+  }).then(function (r) { syncBusy = false; return r; }, function (e) { syncBusy = false; throw e; });
+}
+function syncApplyText(txt) {
+  var j; try { j = JSON.parse(txt); } catch (e) { throw new Error('云端数据不是合法 JSON'); }
+  var d = j && j.data ? j.data : j;
+  S = migrate(d); save(true);
+  UI.toast('已从云端恢复'); UI.go('class');
+}
+function syncPull() {
+  var c = syncCfg();
+  if (!c.gist) { UI.toast('还没有 Gist，先点一次「上传到云端」'); return; }
+  UI.confirm('从云端恢复', '会用云端的数据覆盖这台设备上的全部数据，确定吗？<br>建议先导出一次本地备份。', '覆盖并恢复', function () {
+    syncApi('GET', '/gists/' + c.gist).then(function (g) {
+      var files = g.files || {}, key = files['lezhituoguan-data.json'] ? 'lezhituoguan-data.json' : Object.keys(files)[0];
+      var f = files[key];
+      if (!f) throw new Error('云端没有数据文件');
+      if (f.content) { syncApplyText(f.content); return; }
+      if (f.truncated && f.raw_url) return fetch(f.raw_url).then(function (r) { return r.text(); }).then(syncApplyText);
+      throw new Error('读不到云端数据');
+    }).catch(function (e) { UI.toast('恢复失败：' + e.message, 4200); });
+  });
+}
+function syncPanelHTML() {
+  var c = syncCfg();
+  return '<div class="panel set-sec"><div class="panel-title">云端同步</div>' +
+    '<div class="panel-sub">把整份数据存到你自己的 GitHub 私密 Gist，换手机、换电脑不用再导备份文件。需要一个个人的 GitHub Token（只勾 gist 权限），它只保存在这台设备的浏览器里。</div>' +
+    '<div class="field"><label>GitHub Token</label><input class="inp" type="password" data-inp="sync-token" placeholder="ghp_... 或 github_pat_..." value="' + esc(c.token) + '"><div class="hint">在 github.com/settings/tokens 新建，只勾选 gist；不会发给别人。导出备份时会带上，请勿外传备份文件</div></div>' +
+    '<div class="field"><label>Gist ID</label><input class="inp" data-inp="sync-gist" placeholder="留空则第一次上传时自动创建" value="' + esc(c.gist) + '"></div>' +
+    '<label class="chk" style="margin:6px 0 2px"><input type="checkbox" data-chg="sync-auto"' + (c.auto ? ' checked' : '') + '>每次保存后自动上传（只上传，不自动下载）</label>' +
+    '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px"><button class="btn btn-dark" data-act="sync-up">上传到云端</button><button class="btn btn-light" data-act="sync-down">从云端恢复</button></div>' +
+    '<div class="hint" id="syncStat" style="margin-top:8px">' + (c.last ? '上次同步：' + fmtTime(c.last) : '还没有同步过') + '</div></div>';
+}
+UI.inp['sync-token'] = function (el) { syncCfg().token = el.value.trim(); save(); };
+UI.inp['sync-gist'] = function (el) { syncCfg().gist = el.value.trim().replace(/^.*gists\//, ''); save(); };
+UI.chg['sync-auto'] = function (el) { syncCfg().auto = el.checked; save(); UI.toast(el.checked ? '已开启自动上传' : '已关闭自动上传'); };
+UI.act['sync-up'] = function () { syncPush(false).catch(function () { }); };
+UI.act['sync-down'] = syncPull;
+window.SYNC_AUTO = function () {
+  if (syncQuiet) return;
+  var c = syncCfg();
+  if (!c.auto || !c.token) return;
+  clearTimeout(syncTimer);
+  syncTimer = setTimeout(function () { syncPush(true).catch(function () { }); }, 8000);
+};
+
 UI.act['backup'] = function () {
   S.settings.lastBackup = Date.now(); save(true);
   var d = new Date();
