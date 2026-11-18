@@ -1919,7 +1919,7 @@ var ART = (function () {
 /* =========================================================
    CORE · 工具函数、存储、数据模型（多班级）、示例数据、查询与统计
    ========================================================= */
-var VERSION = '2.11.0';
+var VERSION = '2.11.1';
 var STORE_KEY = 'bzr-workbench-v2';
 /* 旧版本的数据：v1.1 班主任工作台（单个班）、任课教师工作台。第一次打开 v2.0 时自动接过来，旧数据原样保留 */
 var LEGACY_KEYS = ['bzr-workbench-v1', 'rk-workbench-v1'];
@@ -8186,22 +8186,16 @@ UI.act['ai-test'] = function () {
 };
 /* 数据 */
 
-/* =========================================================
-   云端同步：GitHub Gist（可选，用户自己填 Token）
-   ========================================================= */
-function syncCfg() {
-  var st = S.settings;
-  if (!st.sync || typeof st.sync !== 'object') st.sync = { token: '', gist: '', auto: false, last: 0 };
-  return st.sync;
-}
 var syncTimer = null, syncBusy = false, syncQuiet = false;
 
 /* 云端同步（Netlify + Supabase）：数据用「同步码」派生密钥加密后存 Supabase */
+var SUPABASE_URL = 'https://msokovolvvxgtzlccpim.supabase.co';
+var SUPABASE_KEY = 'sb_publishable_8DoVAMeL3IvLJSRwceKnZg_py5chG8h';
 function syncCfg() {
-  if (!S.settings.sync) S.settings.sync = { url: '', key: '', code: '', auto: false, last: 0 };
+  if (!S.settings.sync) S.settings.sync = { url: SUPABASE_URL, key: SUPABASE_KEY, code: '', auto: false, last: 0 };
   var c = S.settings.sync;
-  if (c.url === undefined) c.url = '';
-  if (c.key === undefined) c.key = '';
+  if (!c.url) c.url = SUPABASE_URL;
+  if (!c.key) c.key = SUPABASE_KEY;
   if (c.code === undefined) c.code = '';
   if (c.auto === undefined) c.auto = false;
   if (c.last === undefined) c.last = 0;
