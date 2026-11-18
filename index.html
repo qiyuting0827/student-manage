@@ -1919,7 +1919,7 @@ var ART = (function () {
 /* =========================================================
    CORE · 工具函数、存储、数据模型（多班级）、示例数据、查询与统计
    ========================================================= */
-var VERSION = '2.11.4';
+var VERSION = '2.11.5';
 var STORE_KEY = 'bzr-workbench-v2';
 /* 旧版本的数据：v1.1 班主任工作台（单个班）、任课教师工作台。第一次打开 v2.0 时自动接过来，旧数据原样保留 */
 var LEGACY_KEYS = ['bzr-workbench-v1', 'rk-workbench-v1'];
@@ -8194,10 +8194,15 @@ var SUPABASE_URL = 'https://ruscbaukapxxlzwburre.supabase.co';
 var SUPABASE_KEY = 'sb_publishable_XSUF6UfFcymamNqBdJwWkQ_YPieFolG';
 var SUPABASE_OLD_URL = 'https://msokovolvvxgtzlccpim.supabase.co';
 var SUPABASE_OLD_KEY = 'sb_publishable_8DoVAMeL3IvLJSRwceKnZg_py5chG8h';
+/* 本版修改：部署在 Netlify 时走同域中转 /supa/*，浏览器不必直连 supabase.co（国内常被重置） */
+function syncProxyBase() {
+  return /\.netlify\.app$/.test(location.hostname) ? location.origin + '/supa' : '';
+}
 function syncCfg() {
   if (!S.settings.sync) S.settings.sync = { url: SUPABASE_URL, key: SUPABASE_KEY, code: '', auto: false, last: 0 };
   var c = S.settings.sync;
-  if (!c.url || c.url === SUPABASE_OLD_URL) c.url = SUPABASE_URL;
+  var pb = syncProxyBase();
+  if (!c.url || c.url === SUPABASE_OLD_URL || (pb && c.url === SUPABASE_URL)) c.url = pb || SUPABASE_URL;
   if (!c.key || c.key === SUPABASE_OLD_KEY) c.key = SUPABASE_KEY;
   if (c.code === undefined) c.code = '';
   if (c.auto === undefined) c.auto = false;
