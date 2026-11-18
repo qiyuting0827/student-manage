@@ -1919,7 +1919,7 @@ var ART = (function () {
 /* =========================================================
    CORE · 工具函数、存储、数据模型（多班级）、示例数据、查询与统计
    ========================================================= */
-var VERSION = '2.11.1';
+var VERSION = '2.11.2';
 var STORE_KEY = 'bzr-workbench-v2';
 /* 旧版本的数据：v1.1 班主任工作台（单个班）、任课教师工作台。第一次打开 v2.0 时自动接过来，旧数据原样保留 */
 var LEGACY_KEYS = ['bzr-workbench-v1', 'rk-workbench-v1'];
@@ -8285,6 +8285,7 @@ function syncPush(silent) {
     }
   }).catch(function (e) {
     if (window.UI && !silent) UI.toast('上传失败：' + e.message, 4200);
+    if (window.UI && /does not exist|schema cache|relation/i.test(e.message)) syncSqlModal();
     throw e;
   }).then(function (r) { syncBusy = false; return r; }, function (e) { syncBusy = false; throw e; });
 }
@@ -8315,15 +8316,40 @@ function syncPanelHTML() {
   return '<div class="panel set-sec"><div class="panel-title">云端同步</div>' +
     '<div class="panel-sub">把整份数据加密后存到您自己的 Supabase 数据库，换手机、换电脑输入同一个同步码就能恢复。同步码只存在设备上，忘了就找不回来。</div>' +
     '<div class="field"><label>Supabase 地址</label><input class="inp" data-inp="sync-url" placeholder="https://xxxx.supabase.co" value="' + esc(c.url) + '"></div>' +
-    '<div class="field"><label>Supabase anon key</label><input class="inp" type="password" data-inp="sync-key" placeholder="eyJhbGciOi..." value="' + esc(c.key) + '"><div class="hint">在 Supabase → Project Settings → API 里复制 anon public key</div></div>' +
+    '<div class="field"><label>Supabase key</label><input class="inp" type="password" data-inp="sync-key" placeholder="sb_publishable_..." value="' + esc(c.key) + '"><div class="hint">已内置本工具的 key；换项目时填 Project Settings → API 里的 publishable / anon key</div></div>' +
     '<div class="field"><label>同步码</label><div style="display:flex;gap:8px"><input class="inp" data-inp="sync-code" placeholder="8 位字母数字" value="' + esc(c.code) + '" style="flex:1"><button class="btn btn-light" data-act="sync-code-new">生成</button></div><div class="hint">多台设备填同一个同步码即可共用一份数据</div></div>' +
     '<label class="chk" style="margin:6px 0 2px"><input type="checkbox" data-chg="sync-auto"' + (c.auto ? ' checked' : '') + '>每次保存后自动上传（只上传，不自动下载）</label>' +
-    '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px"><button class="btn btn-dark" data-act="sync-up">上传到云端</button><button class="btn btn-light" data-act="sync-down">从云端恢复</button></div>' +
+    '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px"><button class="btn btn-dark" data-act="sync-up">上传到云端</button><button class="btn btn-light" data-act="sync-down">从云端恢复</button><button class="btn btn-ghost" data-act="sync-test">测试连接</button><button class="btn btn-ghost" data-act="sync-sql">建表 SQL</button></div>' +
     '<div class="hint" id="syncStat" style="margin-top:8px">' + (c.last ? '上次同步：' + fmtTime(c.last) : '还没有同步过') + '</div></div>';
 }
 UI.inp['sync-url'] = function (el) { syncCfg().url = el.value.trim(); save(); };
 UI.inp['sync-key'] = function (el) { syncCfg().key = el.value.trim(); save(); };
 UI.inp['sync-code'] = function (el) { syncCfg().code = el.value.trim().toLowerCase(); save(); };
+/* 本版修改：同步自检 —— 表缺失时直接给出建表 SQL */
+var SYNC_SQL = 'create table if not exists public.sync (\n  code text primary key,\n  payload text not null,\n  updated_at timestamptz not null default now()\n);\n\nalter table public.sync enable row level security;\n\ndrop policy if exists sync_read on public.sync;\ndrop policy if exists sync_insert on public.sync;\ndrop policy if exists sync_update on public.sync;\n\ncreate policy sync_read on public.sync for select using (true);\ncreate policy sync_insert on public.sync for insert with check (true);\ncreate policy sync_update on public.sync for update using (true);';
+function syncSqlModal() {
+  UI.modal({ title: 'Supabase 建表 SQL', wide: true,
+    body: '<div class="panel-sub" style="margin:-2px 0 10px">在 Supabase 项目的 SQL Editor 里执行一次，就能建好同步用的表和权限。</div>' +
+      '<textarea class="ta" id="syncSqlBox" rows="16" style="font-family:ui-monospace,Consolas,monospace;font-size:12.5px">' + esc(SYNC_SQL) + '</textarea>' +
+      '<div class="hint" style="margin-top:8px">执行后点「测试连接」，提示「同步表已就绪」就可以上传了。</div>',
+    foot: '<button class="btn btn-light" data-act="modal-close">关闭</button><button class="btn btn-dark" data-act="sync-sql-copy">复制 SQL</button>' });
+}
+UI.act['sync-sql'] = syncSqlModal;
+UI.act['sync-sql-copy'] = function () {
+  var t = document.getElementById('syncSqlBox'); if (!t) return;
+  t.select();
+  if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(t.value).then(function () { UI.toast('SQL 已复制'); }, function () { UI.toast('请长按选中后复制'); });
+  else UI.toast('请长按选中后复制');
+};
+UI.act['sync-test'] = function () {
+  syncReq('GET', '/rest/v1/sync?select=code&limit=1').then(function () {
+    UI.toast('同步表已就绪，可以上传了');
+  }).catch(function (e) {
+    if (/does not exist|schema cache|relation/i.test(e.message)) { UI.toast('还没建表，正在打开 SQL', 3200); syncSqlModal(); }
+    else UI.toast('连接失败：' + e.message, 4200);
+  });
+};
+
 UI.act['sync-code-new'] = function () {
   var c = syncCfg(); c.code = syncCodeNew(); save();
   var el = document.querySelector('[data-inp="sync-code"]'); if (el) el.value = c.code;
