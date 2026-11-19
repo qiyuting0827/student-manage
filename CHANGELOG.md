@@ -2,6 +2,10 @@
 
 > 原名「班主任工作台」。从 2.0 起并入了「任课教师工作台」，改名为「教师班主任工作台」。
 
+## v2.12.3（2026-11-19）
+
+- 同步中转改为固定绝对地址（`https://lezhituoguan.netlify.app/.netlify/functions/sync`）：GitHub Pages（github.io）等任何站点打开都能同步，不再依赖同域中转。
+
 ## v2.12.2（2026-11-19）
 
 - 同步中转改用 Netlify Function（与单词默写同款）：新增 `netlify/functions/sync.js`，App 在 Netlify 域名下自动走 `/.netlify/functions/sync?p=...`，不再依赖 redirect 规则。
