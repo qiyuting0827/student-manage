@@ -1937,7 +1937,7 @@ var ART = (function () {
 /* =========================================================
    CORE · 工具函数、存储、数据模型（多班级）、示例数据、查询与统计
    ========================================================= */
-var VERSION = '2.12.7';
+var VERSION = '2.12.8';
 var STORE_KEY = 'bzr-workbench-v2';
 /* 旧版本的数据：v1.1 班主任工作台（单个班）、任课教师工作台。第一次打开 v2.0 时自动接过来，旧数据原样保留 */
 var LEGACY_KEYS = ['bzr-workbench-v1', 'rk-workbench-v1'];
@@ -8192,15 +8192,12 @@ var SUPABASE_URL = 'https://ruscbaukapxxlzwburre.supabase.co';
 var SUPABASE_KEY = 'sb_publishable_XSUF6UfFcymamNqBdJwWkQ_YPieFolG';
 var SUPABASE_OLD_URL = 'https://msokovolvvxgtzlccpim.supabase.co';
 var SUPABASE_OLD_KEY = 'sb_publishable_8DoVAMeL3IvLJSRwceKnZg_py5chG8h';
-/* 本版修改：部署在 Netlify 时走同域中转 /supa/*，浏览器不必直连 supabase.co（国内常被重置） */
-var SYNC_FN_FIXED = 'https://lezhituoguan.netlify.app/.netlify/functions/sync';
+/* 本版修改：所有站点统一走独立的同步中转站点（只部署函数，不部署整个应用） */
+var SYNC_FN_FIXED = 'https://lezhituoguan-sync.netlify.app/.netlify/functions/sync';
 function syncProxyBase() {
   var h = location.hostname;
   if (location.protocol !== 'https:') return '';
   if (h === 'localhost' || h === '127.0.0.1') return '';
-  /* 本版修改：与单词默写一致——任何站点都用绝对地址请求 Netlify 函数，
-     这样 GitHub Pages（github.io）也能同步，不再依赖同域中转 */
-  if (/\.netlify\.app$/.test(h) || /\.netlify\.com$/.test(h)) return location.origin + '/.netlify/functions/sync';
   return SYNC_FN_FIXED;
 }
 function syncCfg() {
