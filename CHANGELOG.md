@@ -2,6 +2,10 @@
 
 > 原名「班主任工作台」。从 2.0 起并入了「任课教师工作台」，改名为「教师班主任工作台」。
 
+## v2.12.1（2026-11-19）
+
+- 「建表 SQL」补充 `grant usage on schema public` 与 `grant select, insert, update on public.sync to anon`，解决旧项目里 anon 角色没有表权限导致的 `permission denied for table sync`。
+
 ## v2.12.0（2026-11-19）
 
 - 云端同步整体整理：默认项目改为 `msokovolvvxgtzlccpim`，自动识别「非 github.io 的 HTTPS 站点」并走同域 `/supa` 中转（不再限定 netlify.app，自定义域名同样可用）。

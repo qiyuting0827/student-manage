@@ -1919,7 +1919,7 @@ var ART = (function () {
 /* =========================================================
    CORE · 工具函数、存储、数据模型（多班级）、示例数据、查询与统计
    ========================================================= */
-var VERSION = '2.12.0';
+var VERSION = '2.12.1';
 var STORE_KEY = 'bzr-workbench-v2';
 /* 旧版本的数据：v1.1 班主任工作台（单个班）、任课教师工作台。第一次打开 v2.0 时自动接过来，旧数据原样保留 */
 var LEGACY_KEYS = ['bzr-workbench-v1', 'rk-workbench-v1'];
@@ -8344,7 +8344,7 @@ UI.inp['sync-url'] = function (el) { syncCfg().url = el.value.trim(); save(); };
 UI.inp['sync-key'] = function (el) { syncCfg().key = el.value.trim(); save(); };
 UI.inp['sync-code'] = function (el) { syncCfg().code = el.value.trim().toLowerCase(); save(); };
 /* 本版修改：同步自检 —— 表缺失时直接给出建表 SQL */
-var SYNC_SQL = 'create table if not exists public.sync (\n  code text primary key,\n  payload text not null,\n  updated_at timestamptz not null default now()\n);\n\nalter table public.sync enable row level security;\n\ndrop policy if exists sync_read on public.sync;\ndrop policy if exists sync_insert on public.sync;\ndrop policy if exists sync_update on public.sync;\n\ncreate policy sync_read on public.sync for select using (true);\ncreate policy sync_insert on public.sync for insert with check (true);\ncreate policy sync_update on public.sync for update using (true);';
+var SYNC_SQL = 'create table if not exists public.sync (\n  code text primary key,\n  payload text not null,\n  updated_at timestamptz not null default now()\n);\n\nalter table public.sync enable row level security;\n\ngrant usage on schema public to anon, authenticated;\ngrant select, insert, update on public.sync to anon, authenticated;\n\ndrop policy if exists sync_read on public.sync;\ndrop policy if exists sync_insert on public.sync;\ndrop policy if exists sync_update on public.sync;\n\ncreate policy sync_read on public.sync for select using (true);\ncreate policy sync_insert on public.sync for insert with check (true);\ncreate policy sync_update on public.sync for update using (true);';
 function syncSqlModal() {
   UI.modal({ title: 'Supabase 建表 SQL', wide: true,
     body: '<div class="panel-sub" style="margin:-2px 0 10px">在 Supabase 项目的 SQL Editor 里执行一次，就能建好同步用的表和权限。</div>' +
