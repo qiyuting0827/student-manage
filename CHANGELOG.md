@@ -2,6 +2,11 @@
 
 > 原名「班主任工作台」。从 2.0 起并入了「任课教师工作台」，改名为「教师班主任工作台」。
 
+## v2.12.0（2026-11-19）
+
+- 云端同步整体整理：默认项目改为 `msokovolvvxgtzlccpim`，自动识别「非 github.io 的 HTTPS 站点」并走同域 `/supa` 中转（不再限定 netlify.app，自定义域名同样可用）。
+- `netlify.toml` 中转目标同步改为新项目；重写《部署到Netlify与Supabase.md》，补全建表、部署、验收、排错全流程。
+
 ## v2.11.5（2026-11-18）
 
 - 云端同步支持 Netlify 同域中转：部署在 Netlify 时自动走 `/supa/*`（Netlify 服务器转发到 Supabase），国内网络不必直连 supabase.co。
