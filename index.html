@@ -1925,7 +1925,7 @@ var ART = (function () {
 /* =========================================================
    CORE · 工具函数、存储、数据模型（多班级）、示例数据、查询与统计
    ========================================================= */
-var VERSION = '2.12.5';
+var VERSION = '2.12.6';
 var STORE_KEY = 'bzr-workbench-v2';
 /* 旧版本的数据：v1.1 班主任工作台（单个班）、任课教师工作台。第一次打开 v2.0 时自动接过来，旧数据原样保留 */
 var LEGACY_KEYS = ['bzr-workbench-v1', 'rk-workbench-v1'];
@@ -8176,10 +8176,10 @@ var syncTimer = null, syncBusy = false, syncQuiet = false;
 
 /* 云端同步（Netlify + Supabase）：数据用「同步码」派生密钥加密后存 Supabase */
 /* 本版修改：改用与「单词默写」同一个 Supabase 项目（该域名在用户网络可访问） */
-var SUPABASE_URL = 'https://msokovolvvxgtzlccpim.supabase.co';
-var SUPABASE_KEY = 'sb_publishable_8DoVAMeL3IvLJSRwceKnZg_py5chG8h';
-var SUPABASE_OLD_URL = 'https://ruscbaukapxxlzwburre.supabase.co';
-var SUPABASE_OLD_KEY = 'sb_publishable_XSUF6UfFcymamNqBdJwWkQ_YPieFolG';
+var SUPABASE_URL = 'https://ruscbaukapxxlzwburre.supabase.co';
+var SUPABASE_KEY = 'sb_publishable_XSUF6UfFcymamNqBdJwWkQ_YPieFolG';
+var SUPABASE_OLD_URL = 'https://msokovolvvxgtzlccpim.supabase.co';
+var SUPABASE_OLD_KEY = 'sb_publishable_8DoVAMeL3IvLJSRwceKnZg_py5chG8h';
 /* 本版修改：部署在 Netlify 时走同域中转 /supa/*，浏览器不必直连 supabase.co（国内常被重置） */
 var SYNC_FN_FIXED = 'https://lezhituoguan.netlify.app/.netlify/functions/sync';
 function syncProxyBase() {

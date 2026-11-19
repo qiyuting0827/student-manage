@@ -4,8 +4,8 @@
  * 与「单词默写」那套 Netlify Functions 做法一致。
  */
 
-const SUPABASE = 'https://msokovolvvxgtzlccpim.supabase.co';
-const KEY = process.env.SUPABASE_KEY || 'sb_publishable_8DoVAMeL3IvLJSRwceKnZg_py5chG8h';
+const SUPABASE = 'https://ruscbaukapxxlzwburre.supabase.co';
+const KEY = process.env.SUPABASE_KEY || 'sb_publishable_XSUF6UfFcymamNqBdJwWkQ_YPieFolG';
 
 const CORS = {
   'access-control-allow-origin': '*',

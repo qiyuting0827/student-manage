@@ -16,7 +16,7 @@
 # 目的：国内网络直连 supabase.co 常被重置，走 Netlify 可绕开
 [[redirects]]
   from = "/supa/*"
-  to = "https://msokovolvvxgtzlccpim.supabase.co/:splat"
+  to = "https://ruscbaukapxxlzwburre.supabase.co/:splat"
   status = 200
   force = true
 
