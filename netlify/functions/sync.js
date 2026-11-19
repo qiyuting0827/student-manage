@@ -20,6 +20,16 @@ exports.handler = async (event) => {
 
   const q = event.queryStringParameters || {};
   const p = q.p || '';
+
+  /* 自检：确认线上函数实际在用哪个 Supabase 项目（部署后访问 ?p=/health 即可） */
+  if (p === '/health') {
+    return {
+      statusCode: 200,
+      headers: { ...CORS, 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' },
+      body: JSON.stringify({ ok: true, supabase: SUPABASE, keyTail: KEY.slice(-4), at: new Date().toISOString() })
+    };
+  }
+
   if (!/^\/rest\/v1\//.test(p)) {
     return { statusCode: 400, headers: { ...CORS, 'content-type': 'application/json' }, body: JSON.stringify({ message: 'bad path' }) };
   }
@@ -45,10 +55,11 @@ exports.handler = async (event) => {
       body: text
     };
   } catch (e) {
+    const cause = (e && e.cause) ? ((e.cause.code || e.cause.message || e.cause) + '') : '';
     return {
       statusCode: 502,
       headers: { ...CORS, 'content-type': 'application/json; charset=utf-8' },
-      body: JSON.stringify({ message: 'proxy failed: ' + ((e && e.message) || e) })
+      body: JSON.stringify({ message: 'proxy failed: ' + ((e && e.message) || e) + ' -> ' + SUPABASE + (cause ? ' (' + cause + ')' : '') })
     };
   }
 };

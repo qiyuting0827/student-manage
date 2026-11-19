@@ -152,6 +152,8 @@ svg.ava { border-radius: 50%; overflow: hidden; }
 #stuChips, #scTabs { flex-wrap: nowrap; overflow-x: auto; overflow-y: hidden; -webkit-overflow-scrolling: touch; scrollbar-width: none; }
 #stuChips::-webkit-scrollbar, #scTabs::-webkit-scrollbar { display: none; }
 #stuChips button, #scTabs button { flex: 0 0 auto; }
+/* 本版修改：班级条被内容撑宽会导致整条超出屏幕，改为定宽容器内部横滑 */
+#scTabs { display: flex; width: 100%; max-width: calc(100vw - 32px); min-width: 0; box-sizing: border-box; }
 @media (max-width: 900px) { #stuChips { flex: 1 1 100%; } }
 .hr { height: 1px; background: var(--line); margin: 16px 0; }
 .empty { text-align: center; padding: 34px 12px; color: var(--ink3); font-size: 13px; }
@@ -1101,6 +1103,16 @@ body.has-guard .welcome { top: var(--gb-h, 40px); }
  
 }
 
+
+/* 本版修改：班级切换条按视口宽度约束，班级多时可横向滑动（成绩录入 / 学生名单） */
+@media (max-width: 1120px) {
+  .page { overflow-x: hidden; }
+  #scTabs { width: calc(100vw - 40px) !important; max-width: calc(100vw - 40px) !important; overflow-x: auto; overflow-y: hidden; touch-action: pan-x; }
+  #scTabs button { flex: 0 0 auto; }
+}
+@media (max-width: 560px) {
+  #scTabs { width: calc(100vw - 28px) !important; max-width: calc(100vw - 28px) !important; }
+}
 </style>
 </head>
 <body>
@@ -1925,7 +1937,7 @@ var ART = (function () {
 /* =========================================================
    CORE · 工具函数、存储、数据模型（多班级）、示例数据、查询与统计
    ========================================================= */
-var VERSION = '2.12.6';
+var VERSION = '2.12.7';
 var STORE_KEY = 'bzr-workbench-v2';
 /* 旧版本的数据：v1.1 班主任工作台（单个班）、任课教师工作台。第一次打开 v2.0 时自动接过来，旧数据原样保留 */
 var LEGACY_KEYS = ['bzr-workbench-v1', 'rk-workbench-v1'];
