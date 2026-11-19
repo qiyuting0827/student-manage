@@ -10,7 +10,7 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <meta name="theme-color" content="#171717">
-<meta name="description" content="乐智托管 v2.0 · 个人工作台系列第 1 期：每个班的学生档案、考勤、全科成绩、班级课表，加上课表、教学进度和单科成绩分析，以及 AI 助手。单文件，数据只存在本机。">
+<meta name="description" content="乐智托管：每个班的学生档案、考勤、全科成绩、成绩分析与班级管理。单文件，数据存在本机并可云端同步。">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='-24 -24 48 48'%3E%3Crect x='-24' y='-24' width='48' height='48' rx='13' fill='%23171717'/%3E%3Ccircle cx='0' cy='-2' r='11' fill='%23fff'/%3E%3Cellipse cx='-4' cy='-2' rx='2.6' ry='3.1' fill='%23171717'/%3E%3Cellipse cx='4' cy='-2' rx='2.6' ry='3.1' fill='%23171717'/%3E%3Cpath d='M-10 9 Q0 14 10 9 L11 14 Q0 19 -11 14 Z' fill='%23e5483b'/%3E%3C/svg%3E">
 <style>
 /* =========================================================
@@ -1919,7 +1919,7 @@ var ART = (function () {
 /* =========================================================
    CORE · 工具函数、存储、数据模型（多班级）、示例数据、查询与统计
    ========================================================= */
-var VERSION = '2.12.3';
+var VERSION = '2.12.4';
 var STORE_KEY = 'bzr-workbench-v2';
 /* 旧版本的数据：v1.1 班主任工作台（单个班）、任课教师工作台。第一次打开 v2.0 时自动接过来，旧数据原样保留 */
 var LEGACY_KEYS = ['bzr-workbench-v1', 'rk-workbench-v1'];
@@ -3397,7 +3397,6 @@ var UI = {
       navItem('scores', ICON.edit, '成绩录入') +
       navItem('analysis', ICON.chart, '成绩分析') +
       navItem('students', ICON.users, '学生名单', allStudents().length) +
-      navItem('ai', ICON.spark, 'AI 助手') +
       '</nav>' +
       '<div class="nav-label">最近对话</div><div class="recent" id="recentChats"></div>' +
       '<div class="side-foot">' + (S.demo ? '<div class="side-demo"><b>正在查看示例数据</b>3 个班都是虚拟的。看明白了就换成自己的班<button class="btn btn-xs btn-dark" data-act="demo-clear">开始录入我的班级</button></div>' : '') + '<nav class="nav">' + navItem('settings', ICON.gear, '设置') + '</nav>' +
@@ -4197,9 +4196,7 @@ function teacherCardHTML() {
   var hc = hrCls();
   return '<div class="hc-head">' + ART.teacherAvatar(t, 56) + '<div><div class="hc-name">' + esc(t.name) + '</div><div class="hc-role">' + esc(t.subject || '任课') + '老师 · 任教 ' + S.classes.length + ' 个班</div>' +
     '<div class="hc-status"><i></i>今天 ' + today.length + ' 节课' + (today.length ? '，还剩 ' + left + ' 节' : '') + '</div></div></div>' +
-    '<div class="hc-sec"><div class="hc-k">每周：</div><div class="hc-v">' + week + ' 节正课 · ' + S.classes.map(function (c) { return esc(c.name) + ' ' + weeklyCount(c.id, '正课') + ' 节'; }).join('，') + '</div></div>' +
-    '<div class="hc-sec"><div class="hc-k">AI 能帮你：</div><div class="tags"><span class="tag">写教案</span><span class="tag">分层作业</span><span class="tag">试卷分析</span><span class="tag">学科评语</span><span class="tag">教学反思</span></div></div>' +
-    '<div class="hc-act"><button class="btn btn-sm btn-dark" data-act="go" data-page="ai">打开 AI 助手</button></div>';
+    '<div class="hc-sec"><div class="hc-k">每周：</div><div class="hc-v">' + week + ' 节正课 · ' + S.classes.map(function (c) { return esc(c.name) + ' ' + weeklyCount(c.id, '正课') + ' 节'; }).join('，') + '</div></div>';
 }
 function scheduleCard(el) {
   clearTimeout(Cls.cardT); clearTimeout(Cls.hideT);
@@ -4683,7 +4680,7 @@ Cls.renderRail = function (el) {
   h += '<div class="rail-sec"><div class="rail-k">待办</div>' + S.todos.map(function (t) {
     return '<label class="todo' + (t.done ? ' done' : '') + '"><input type="checkbox" data-chg="todo-done" data-id="' + t.id + '"' + (t.done ? ' checked' : '') + '><span>' + esc(t.text) + '</span><button class="x" data-act="todo-del" data-id="' + t.id + '" aria-label="删除">×</button></label>';
   }).join('') + '<div class="todo-add"><input class="inp" id="todoNew" placeholder="添加一件要做的事" data-key="todo-add"><button class="btn btn-sm btn-dark btn-icon" data-act="todo-add" aria-label="添加" style="width:32px;height:32px">' + ICON.plus + '</button></div></div>';
-  h += '<div class="privacy">' + ICON.lock + '<span>数据只保存在这台电脑的浏览器里</span><button data-act="backup">备份</button></div>';
+  h += '<div class="privacy">' + ICON.lock + '<span>数据只保存在这台电脑的浏览器里</span></div>';
   el.innerHTML = h;
 };
 UI.chg['todo-done'] = function (el) { var t = S.todos.filter(function (x) { return x.id === el.getAttribute('data-id'); })[0]; if (t) { t.done = el.checked; save(); Cls.renderRail(); } };
@@ -7986,7 +7983,7 @@ function hrFieldHTML(type, key, lab, pre) {
    ========================================================= */
 var SetP = { sec: 'profile' };
 var DEV_MAIL = 'cyberdaddyleo@outlook.com';
-var SET_SECS = [['profile', '个人信息'], ['teach', '成绩线与点评'], ['ai', 'AI 接口'], ['data', '数据与备份'], ['about', '关于']];
+var SET_SECS = [['profile', '个人信息'], ['teach', '成绩线与点评'], ['data', '数据与备份'], ['about', '关于']];
 
 
 UI.register('settings', {
@@ -8032,36 +8029,19 @@ function renderSetBody() {
       st.reasons.map(function (r, i) { return '<span class="sub-item" style="background:' + (r.d > 0 ? 'var(--green-soft)' : 'var(--red-soft)') + '">' + esc(r.t) + '<input value="' + r.d + '" data-inp="set-rs-d" data-i="' + i + '" aria-label="分值"><button data-act="set-rs-del" data-i="' + i + '" aria-label="删除">×</button></span>'; }).join('') + '</div>' +
       '<div style="display:flex;gap:6px;margin-top:12px"><input class="inp" id="newRs" placeholder="理由，如：解题思路新颖" style="width:220px;height:32px"><input class="inp num" id="newRsD" value="1" style="width:64px;height:32px"><button class="btn btn-light btn-sm" data-act="set-rs-add">添加</button></div>' +
       '<div class="hr"></div><label class="chk"><input type="checkbox" data-chg="set-anim"' + (st.anim ? ' checked' : '') + '> 教室小动画（同学偶尔回头、举手、打瞌睡）</label></div>';
-  } else if (SetP.sec === 'ai') {
-    var a = st.ai, pr = presetOf(a.provider);
-    h += '<div class="panel set-sec"><div class="panel-title">AI 接口</div><div class="panel-sub">填一个 API Key 就能在工作台里直接生成。不配置也能用：生成时会给你一段提示词，复制到豆包、DeepSeek 等网页版即可。</div>' +
-      '<div class="field"><label>服务商</label><select class="sel" data-chg="ai-provider">' + AI_PRESETS.map(function (p) { return '<option value="' + p.id + '"' + (a.provider === p.id ? ' selected' : '') + '>' + p.name + '</option>'; }).join('') + '</select>' +
-      (pr.site ? '<div class="hint">到 ' + esc(pr.site) + ' 注册并创建 API Key' + (pr.hint ? '；' + esc(pr.hint) : '') + '</div>' : (pr.hint ? '<div class="hint">' + esc(pr.hint) + '</div>' : '')) + '</div>' +
-      '<div class="field"><label>API Key</label><div style="display:flex;gap:6px"><input class="inp num" type="password" id="aiKey" value="' + esc(a.key) + '" placeholder="sk-..." data-inp="set" data-path="ai.key" autocomplete="off"><button class="btn btn-light btn-icon" data-act="ai-key-eye" title="显示/隐藏" aria-label="显示或隐藏 Key">' + ICON.eye + '</button></div></div>' +
-      '<div class="row2"><div class="field"><label>接口地址（Base URL）</label>' + sInp('ai.base', a.base, 'https://.../v1') + '</div><div class="field"><label>模型名称</label>' + sInp('ai.model', a.model, '如：deepseek-flash') + '</div></div>' +
-      '<div class="row2"><div class="field"><label>创造性（temperature）</label>' + sInp('ai.temp', a.temp, '0.7', 'number', ' step="0.1" min="0" max="1.5"') + '<div class="hint">写材料建议 0.6–0.8；出题、分析可以调低到 0.3–0.5</div></div>' +
-      '<div class="field"><label>隐私</label><label class="chk" style="height:38px"><input type="checkbox" data-chg="ai-mask"' + (a.mask ? ' checked' : '') + '>发送前隐去学生姓名</label><div class="hint">姓名替换成【学生07】这样的编号，结果回来后自动换回</div></div></div>' +
-      '<div style="display:flex;gap:10px;align-items:center"><button class="btn btn-dark" data-act="ai-test">测试连接</button><span id="aiTestRes" class="muted" style="font-size:13px"></span></div></div>' +
-      '<div class="panel set-sec"><div class="panel-title">连不上？</div><div style="font-size:13px;line-height:1.85;color:var(--ink2)">网页直接调用 AI 时，有些服务商会拦截（跨域限制）。DeepSeek、Kimi、OpenAI、Claude 一般可以直接用；如果提示「连不上」，可以：<br>① 换一家服务商试试；② 用开源包里的 <span class="kbd">ai-proxy.js</span>：电脑装好 Node.js 后运行 <span class="kbd">node ai-proxy.js</span>，再把接口地址改成 <span class="kbd">http://127.0.0.1:8787/</span> 加原地址，例如 <span class="kbd">http://127.0.0.1:8787/https://api.deepseek.com</span>。<br>API Key 只保存在这台电脑的浏览器里，不会上传到任何地方。</div></div>';
   } else if (SetP.sec === 'data') {
     var size = 0; try { size = (Store.get(STORE_KEY) || '').length; } catch (e) { }
     var days = st.lastBackup ? Math.floor((Date.now() - st.lastBackup) / 86400000) : null;
-    h += '<div class="upgrade-tip"><div class="ut-ico">' + ICON.up + '</div><div class="ut-body"><b>升级新版本前，请先保存数据</b>' +
-      '<ol><li><b>升级前：</b>点下面的「导出备份」，把备份文件（.json）存好，比如存到 U 盘或网盘。</li>' +
-      '<li><b>升级后：</b>打开新版本，到「设置 → 数据与备份」点「从备份恢复」，选这个备份文件，数据就都回来了，接着用就行。新版本第一次打开时，欢迎页上也有「从备份恢复」。</li></ol>' +
-      '<small>在同一个浏览器里用新文件替换旧文件，一般会自动沿用原来的数据；换了电脑、换了浏览器，或者打开后数据没出现，用备份恢复即可。旧版本导出的备份，新版本都能导入。</small>' +
-      '<div class="ut-foot">当前版本 v' + VERSION + ' · ' + (st.lastBackup ? '上次备份：' + fmtTime(st.lastBackup) + (days >= 7 ? '，<span class="dn">已经 ' + days + ' 天没备份了</span>' : '') : '<span class="dn">还没有备份过</span>') + '<button class="btn btn-dark btn-sm" data-act="backup">' + ICON.down + '现在导出备份</button></div></div></div>' +
-      '<div class="panel set-sec"><div class="panel-title">数据与备份</div><div class="panel-sub">所有数据只保存在这台电脑的浏览器里，不会上传。清理浏览器数据、换电脑、升级新版本前，请先导出备份。</div>' +
-      '<div class="info-grid" style="margin-bottom:16px"><div class="k">当前数据</div><div>' + S.classes.length + ' 个班 · ' + allStudents().length + ' 名学生 · ' + Object.keys(S.tt).length + ' 格课表 · ' + S.exams.length + ' 场考试 · ' + S.points.length + ' 条点评' + (hrCls() ? ' · ' + Object.keys(S.attendance).length + ' 天考勤 · ' + S.records.length + ' 条成长记录' : '') + ' · ' + S.chats.length + ' 个 AI 对话</div>' +
+    h += '<div class="panel set-sec"><div class="panel-title">数据与备份</div><div class="panel-sub">所有数据只保存在这台设备的浏览器里；换设备、清理浏览器数据前，请用下面的云端同步留一份。</div>' +
+      '<div class="info-grid" style="margin-bottom:16px"><div class="k">当前数据</div><div>' + S.classes.length + ' 个班 · ' + allStudents().length + ' 名学生 · ' + Object.keys(S.tt).length + ' 格课表 · ' + S.exams.length + ' 场考试 · ' + S.points.length + ' 条点评' + (hrCls() ? ' · ' + Object.keys(S.attendance).length + ' 天考勤 · ' + S.records.length + ' 条成长记录' : '') + '</div>' +
       '<div class="k">占用空间</div><div class="num">' + (size / 1024).toFixed(1) + ' KB</div>' +
-      '<div class="k">上次备份</div><div>' + (st.lastBackup ? fmtTime(st.lastBackup) : '<span class="dn">还没有备份过</span>') + '</div>' +
-      '<div class="k">存储状态</div><div>' + (Store.ok() ? '正常' : '<span class="dn">浏览器禁止了本地存储，关闭页面后数据会丢失，请及时导出备份</span>') + '</div></div>' +
-      '<div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn btn-dark" data-act="backup">' + ICON.down + '导出备份</button><label class="btn btn-light" style="cursor:pointer">' + ICON.up + '从备份恢复<input type="file" accept=".json" hidden data-chg="restore"></label></div></div>' +
+      '<div class="k">存储状态</div><div>' + (Store.ok() ? '正常' : '<span class="dn">浏览器禁止了本地存储，关闭页面后数据会丢失</span>') + '</div></div>' +
+
       syncPanelHTML() +
-      '<div class="panel set-sec"><div class="panel-title">重新开始</div><div class="panel-sub">以下操作会覆盖当前数据，建议先导出备份</div><div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn btn-light" data-act="exam-clear" style="color:var(--red)">' + ICON.trash + '删除全部考试</button><button class="btn btn-light" data-act="wipe" style="color:var(--red)">' + ICON.trash + '清空全部数据</button></div></div>';
+      '<div class="panel set-sec"><div class="panel-title">重新开始</div><div class="panel-sub">以下操作会覆盖当前数据</div><div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn btn-light" data-act="exam-clear" style="color:var(--red)">' + ICON.trash + '删除全部考试</button><button class="btn btn-light" data-act="wipe" style="color:var(--red)">' + ICON.trash + '清空全部数据</button></div></div>';
   } else if (SetP.sec === 'about') {
     h += '<div class="panel set-sec"><div style="display:flex;gap:14px;align-items:center">' + brandMark().replace('class="brand-mark"', 'class="brand-mark" style="width:52px;height:52px"') + '<div><div style="font-size:18px;font-weight:700">乐智托管</div><div class="muted" style="font-size:13px">个人工作台系列 · 第 1 期 · v' + VERSION + '</div></div></div>' +
-      '<div style="font-size:13.5px;line-height:1.9;color:var(--ink2);margin-top:14px">给独立教师用：每个班都有课表与调课、教学进度、学生档案、考勤、全科成绩、成绩分析、班级课表，班与班之间可以横向对比。外加可接入任意大模型的 AI 助手。所有数据都留在你自己的电脑上。<br>开源版只做 PC 端；手机端和更多职业版本会陆续推出。</div>' +
+      '<div style="font-size:13.5px;line-height:1.9;color:var(--ink2);margin-top:14px">给独立教师用：每个班都有课表与调课、教学进度、学生档案、考勤、全科成绩、成绩分析、班级课表，班与班之间可以横向对比。所有数据都留在你自己的电脑上。<br>开源版只做 PC 端；手机端和更多职业版本会陆续推出。</div>' +
       '<div style="font-size:13px;line-height:1.8;color:var(--ink2);margin-top:12px;padding:12px 14px;background:var(--fill);border-radius:12px"><b style="color:var(--ink)">开源协议</b><br>个人可以免费使用、修改和二次开发，分享时请保留作者署名和协议；禁止任何形式的商业使用。完整条款见随软件附带的 LICENSE 文件。</div>' +
       '<div class="dev-info"><b>开发者</b><div class="info-grid"><div class="k">全网渠道</div><div>@赛博老爸</div>' +
       '<div class="k">商用及合作开发</div><div class="dev-mail"><a href="mailto:' + DEV_MAIL + '">' + DEV_MAIL + '</a><button class="btn btn-xs btn-light" data-act="copy-txt" data-t="' + DEV_MAIL + '">复制</button></div></div></div>' +
@@ -8336,16 +8316,13 @@ function syncPull() {
 function syncPanelHTML() {
   var c = syncCfg();
   return '<div class="panel set-sec"><div class="panel-title">云端同步</div>' +
-    '<div class="panel-sub">把整份数据加密后存到您自己的 Supabase 数据库，换手机、换电脑输入同一个同步码就能恢复。同步码只存在设备上，忘了就找不回来。</div>' +
-    '<div class="field"><label>Supabase 地址</label><input class="inp" data-inp="sync-url" placeholder="https://xxxx.supabase.co" value="' + esc(c.url) + '"></div>' +
-    '<div class="field"><label>Supabase key</label><input class="inp" type="password" data-inp="sync-key" placeholder="sb_publishable_..." value="' + esc(c.key) + '"><div class="hint">已内置本工具的 key；换项目时填 Project Settings → API 里的 publishable / anon key</div></div>' +
+    '<div class="panel-sub">把整份数据加密后存到云端，换手机、换电脑输入同一个同步码就能恢复。同步码只存在设备上，忘了就找不回来。</div>' +
+
     '<div class="field"><label>同步码</label><div style="display:flex;gap:8px"><input class="inp" data-inp="sync-code" placeholder="8 位字母数字" value="' + esc(c.code) + '" style="flex:1"><button class="btn btn-light" data-act="sync-code-new">生成</button></div><div class="hint">多台设备填同一个同步码即可共用一份数据</div></div>' +
     '<label class="chk" style="margin:6px 0 2px"><input type="checkbox" data-chg="sync-auto"' + (c.auto ? ' checked' : '') + '>每次保存后自动上传（只上传，不自动下载）</label>' +
     '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px"><button class="btn btn-dark" data-act="sync-up">上传到云端</button><button class="btn btn-light" data-act="sync-down">从云端恢复</button><button class="btn btn-ghost" data-act="sync-test">测试连接</button><button class="btn btn-ghost" data-act="sync-sql">建表 SQL</button></div>' +
     '<div class="hint" id="syncStat" style="margin-top:8px">' + (c.last ? '上次同步：' + fmtTime(c.last) : '还没有同步过') + '</div></div>';
 }
-UI.inp['sync-url'] = function (el) { syncCfg().url = el.value.trim(); save(); };
-UI.inp['sync-key'] = function (el) { syncCfg().key = el.value.trim(); save(); };
 UI.inp['sync-code'] = function (el) { syncCfg().code = el.value.trim().toLowerCase(); save(); };
 /* 本版修改：同步自检 —— 表缺失时直接给出建表 SQL */
 var SYNC_SQL = 'create table if not exists public.sync (\n  code text primary key,\n  payload text not null,\n  updated_at timestamptz not null default now()\n);\n\nalter table public.sync enable row level security;\n\ngrant usage on schema public to anon, authenticated;\ngrant select, insert, update on public.sync to anon, authenticated;\n\ndrop policy if exists sync_read on public.sync;\ndrop policy if exists sync_insert on public.sync;\ndrop policy if exists sync_update on public.sync;\n\ncreate policy sync_read on public.sync for select using (true);\ncreate policy sync_insert on public.sync for insert with check (true);\ncreate policy sync_update on public.sync for update using (true);';
@@ -8443,7 +8420,6 @@ function showWelcome() {
     '<div class="w-form"><div class="field"><label>怎么称呼你</label><input class="inp" id="wName" placeholder="如：李老师" value="' + (Welcome.g === 'F' ? '李老师' : '王老师') + '"></div><div class="field"><label>任教学科</label><input class="inp" id="wSub" placeholder="如：数学" value="数学"></div></div>' +
     '<div id="wBlank" style="max-width:440px;margin:8px auto 22px;text-align:left"><div class="field"><label>我教的班级</label><input class="inp" id="wClass" placeholder="多个班用顿号隔开，如：初二（3）班、初二（5）班"><label class="chk" style="margin-top:8px;display:none"><input type="checkbox" id="wHr" checked></label></div><div class="row2"><div class="field"><label>学段</label><select class="sel" id="wStage"><option>小学</option><option selected>初中</option><option>高中</option></select></div><div class="field"><label>课桌</label><div class="seg light" id="wPer">' + DESK_PER.map(function (d) { return '<button type="button" class="' + (Welcome.per === d[0] ? 'on' : '') + '" data-act="w-per" data-v="' + d[0] + '">' + d[1] + '</button>'; }).join('') + '</div></div></div></div>' +
     '<button class="btn btn-dark w-go" data-act="w-go">开启工作台</button>' +
-    '<div class="w-restore">升级了新版本、换了电脑？<label>' + ICON.up + '从备份恢复<input type="file" accept=".json" hidden data-chg="restore"></label>，选之前导出的备份文件，数据就都回来了</div>' +
     '<div class="muted" style="font-size:12px;margin-top:16px">' + ICON.lock.replace('width="14" height="14"', 'width="12" height="12" style="display:inline;vertical-align:-1px"') + ' 所有数据只保存在这台电脑的浏览器里</div><div class="sign" style="padding-top:28px">Developed by @赛博老爸</div></div>';
   document.body.appendChild(el);
 }
@@ -8486,7 +8462,6 @@ function boot() {
   var h = (location.hash || '').replace('#/', '');
   UI.go(UI.pages[h] ? h : 'class');
   /* 本版修改：满 7 天没导出备份就在顶部提醒一次 */
-  GUARD.checkBackup();
   if (S.from) {   // 刚从旧版接过来的数据：提示一次，并存成新版
     var msg = { 'v1.1': '已把旧版班主任工作台 v1.1 的数据升级到新版：学生、座位、成绩、考勤都在', 'rk': '已接上任课教师工作台的数据，可以接着用了', 'merge': '已把旧版班主任工作台 v1.1 和任课教师工作台的数据合并到一起', 'demo': '已载入新版示例数据' }[S.from];
     delete S.from; save(true);
