@@ -8,7 +8,11 @@
     X-Content-Type-Options = "nosniff"
     Referrer-Policy = "strict-origin-when-cross-origin"
 
-# 同域中转：浏览器只访问本站 /supa/*，由 Netlify 服务器转发到 Supabase
+# 同步中转函数（与「单词默写」同款做法，比 redirect 更稳）
+[functions]
+  directory = "netlify/functions"
+
+# 备用同域中转：浏览器只访问本站 /supa/*，由 Netlify 服务器转发到 Supabase
 # 目的：国内网络直连 supabase.co 常被重置，走 Netlify 可绕开
 [[redirects]]
   from = "/supa/*"

@@ -2,6 +2,10 @@
 
 > 原名「班主任工作台」。从 2.0 起并入了「任课教师工作台」，改名为「教师班主任工作台」。
 
+## v2.12.2（2026-11-19）
+
+- 同步中转改用 Netlify Function（与单词默写同款）：新增 `netlify/functions/sync.js`，App 在 Netlify 域名下自动走 `/.netlify/functions/sync?p=...`，不再依赖 redirect 规则。
+
 ## v2.12.1（2026-11-19）
 
 - 「建表 SQL」补充 `grant usage on schema public` 与 `grant select, insert, update on public.sync to anon`，解决旧项目里 anon 角色没有表权限导致的 `permission denied for table sync`。

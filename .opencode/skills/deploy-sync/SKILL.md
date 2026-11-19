@@ -10,8 +10,15 @@ description: 乐智托管的数据同步部署与排错：Supabase 建表、Netl
 ## 0. 架构（先理解，再动手）
 
 ```
-浏览器 ──https──> lezhituoguan.netlify.app/supa/*  ──Netlify 服务器──> msoko…supabase.co/rest/v1/*
+浏览器 ──https──> lezhituoguan.netlify.app/.netlify/functions/sync?p=/rest/v1/...
+                                   │
+                            Netlify Function（netlify/functions/sync.js）
+                                   │
+                                   └──> msoko…supabase.co/rest/v1/...
 ```
+
+> 优先用 **Netlify Function**（与「单词默写」同款，`vocab-drill-sync.netlify.app/.netlify/functions/sync`）。
+> `netlify.toml` 里的 `/supa/*` redirect 保留作备用。
 
 - 用户网络经常对 `*.supabase.co` 做 SNI 重置（`PR_CONNECT_RESET_ERROR`），**直连必失败**。
 - 所以浏览器只连 Netlify 自己的域名，由 Netlify 服务器转发。
@@ -137,6 +144,8 @@ create policy sync_update on public.sync for update using (true);
 | `new row violates row-level security` | 缺 policy | 跑第 2 步的 policy 部分 |
 | `No API key found in request` | key 没带上（多见于直接访问 `/supa/rest/v1/`） | 正常，App 内会自动带 |
 | `/supa/...` 返回 404 或 HTML | 中转规则没生效 | 检查 `netlify.toml`；Clear cache and deploy |
+| `/.netlify/functions/sync` 返回 404 | Functions 目录没识别 | `netlify.toml` 里加 `[functions] directory = "netlify/functions"`，重新部署 |
+| 函数返回 502 `proxy failed` | Netlify 到 Supabase 也不通 | 极少见，检查 Supabase 项目是否被暂停 |
 | 改了代码但页面没变 | Service Worker 缓存 | 关页重开 / 加 `?v=2` / 清站点数据 |
 | 上传成功但另一台恢复旧数据 | 自动上传互相覆盖 | 只在一台设备开启自动上传 |
 

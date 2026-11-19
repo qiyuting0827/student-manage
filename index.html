@@ -1919,7 +1919,7 @@ var ART = (function () {
 /* =========================================================
    CORE · 工具函数、存储、数据模型（多班级）、示例数据、查询与统计
    ========================================================= */
-var VERSION = '2.12.1';
+var VERSION = '2.12.2';
 var STORE_KEY = 'bzr-workbench-v2';
 /* 旧版本的数据：v1.1 班主任工作台（单个班）、任课教师工作台。第一次打开 v2.0 时自动接过来，旧数据原样保留 */
 var LEGACY_KEYS = ['bzr-workbench-v1', 'rk-workbench-v1'];
@@ -8201,7 +8201,8 @@ function syncProxyBase() {
   if (h === 'localhost' || h === '127.0.0.1') return '';
   /* github.io 没有中转规则，仍直连（国内多半连不上） */
   if (/\.github\.io$/.test(h)) return '';
-  return location.origin + '/supa';
+  /* 本版修改：优先走 Netlify Functions 中转（与单词默写一致），比 redirect 更稳 */
+  return location.origin + '/.netlify/functions/sync';
 }
 function syncCfg() {
   if (!S.settings.sync) S.settings.sync = { url: SUPABASE_URL, key: SUPABASE_KEY, code: '', auto: false, last: 0 };
@@ -8228,7 +8229,9 @@ function syncReq(method, path, body) {
     'Content-Type': 'application/json'
   };
   if (method !== 'GET') h['Prefer'] = 'resolution=merge-duplicates,return=minimal';
-  return fetch(syncBase() + path, {
+  var base = syncBase();
+  var url = /\/\.netlify\/functions\/sync$/.test(base) ? base + '?p=' + encodeURIComponent(path) : base + path;
+  return fetch(url, {
     method: method, headers: h, body: body ? JSON.stringify(body) : undefined
   }).catch(function (e) {
     /* 本版修改：网络层失败给出可读提示，方便区分「没建表」和「连不上」 */
