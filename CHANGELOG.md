@@ -2,6 +2,10 @@
 
 > 原名「班主任工作台」。从 2.0 起并入了「任课教师工作台」，改名为「教师班主任工作台」。
 
+## v2.12.10
+- 同步中转改为 Cloudflare Pages（workers.dev 在国内被拦截，pages.dev 可用）
+- 中转地址固定为 https://lz-sync.pages.dev ，worker 代码在 sync-proxy/public/_worker.js
+
 ## v2.12.9
 - 同步中转从 Netlify 换到 Cloudflare Worker（Netlify 本周期额度用尽，函数无法重新部署）
 - 中转地址固定为 https://lz-sync.860787450.workers.dev ，所有 https 站点统一走它
