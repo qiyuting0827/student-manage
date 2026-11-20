@@ -2,6 +2,10 @@
 
 > 原名「班主任工作台」。从 2.0 起并入了「任课教师工作台」，改名为「教师班主任工作台」。
 
+## v2.12.9
+- 同步中转从 Netlify 换到 Cloudflare Worker（Netlify 本周期额度用尽，函数无法重新部署）
+- 中转地址固定为 https://lz-sync.860787450.workers.dev ，所有 https 站点统一走它
+
 ## v2.12.8（2026-11-19）
 
 - 新增 `sync-proxy/` 目录：只部署同步中转函数的最小站点（不部署整个应用），所有站点统一走 `lezhituoguan-sync.netlify.app` 的函数。

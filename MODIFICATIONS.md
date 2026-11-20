@@ -292,3 +292,7 @@
 - 2026-11-19 · 成绩录入班级切换条可横滑、窄屏页面不横向溢出（v2.12.7）
 
 - 2026-11-19 · 同步中转改为独立最小站点（sync-proxy/）（v2.12.8）
+
+## 2026-11-20 · 同步中转改 Cloudflare Worker（v2.12.9）
+- 原 Netlify 中转因额度耗尽无法部署，改在 Cloudflare Worker 上运行同一份转发代码（`sync-proxy/worker.js`）。
+- `SYNC_FN_FIXED` 指向 `https://lz-sync.860787450.workers.dev`，`syncReq()` 支持 workers.dev / pages.dev 根路径的 `?p=` 形式。
